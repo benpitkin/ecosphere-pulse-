@@ -63,19 +63,19 @@ async function getAuth(): Promise<
   if (!clientId || !clientSecret) return { ok: false, error: "env: missing XERO_CLIENT_ID/SECRET" };
 
   const admin = createAdminClient();
-  // Read with a short retry: at cold start the first Supabase call in a
-  // concurrent batch can come back empty, which would wrongly look like
-  // "not connected".
-  let conn: ConnRow | null = null;
+  // Read ONLY the minimal, reliable columns. Including tenant_name/access_token
+  // in this select was intermittently returning zero rows on this stack, so we
+  // keep the gating read tiny and refresh the access token fresh each call.
+  let conn: { tenant_id: string | null; refresh_token: string | null } | null = null;
   let lastErr: string | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     const { data, error } = await admin
       .from("xero_connection")
-      .select("tenant_id, tenant_name, refresh_token, access_token, access_expires_at")
+      .select("tenant_id, refresh_token")
       .eq("id", true)
       .maybeSingle();
     if (data) {
-      conn = data as ConnRow;
+      conn = data as { tenant_id: string | null; refresh_token: string | null };
       break;
     }
     lastErr = error?.message ?? null;
@@ -85,16 +85,8 @@ async function getAuth(): Promise<
     return { ok: false, error: lastErr ?? "no Xero connection stored" };
   }
 
-  // Reuse a still-fresh access token (60s safety margin).
-  if (
-    conn.access_token &&
-    conn.access_expires_at &&
-    new Date(conn.access_expires_at).getTime() - Date.now() > 60_000
-  ) {
-    return { ok: true, accessToken: conn.access_token, tenantId: conn.tenant_id, tenantName: conn.tenant_name };
-  }
-
-  // Refresh — Xero rotates the refresh token, so persist whatever comes back.
+  // Always refresh to obtain a valid access token. Xero rotates the refresh
+  // token, so persist whatever comes back.
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   let body: { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
   try {
@@ -129,7 +121,7 @@ async function getAuth(): Promise<
     })
     .eq("id", true);
 
-  return { ok: true, accessToken: body.access_token, tenantId: conn.tenant_id, tenantName: conn.tenant_name };
+  return { ok: true, accessToken: body.access_token, tenantId: conn.tenant_id, tenantName: null };
 }
 
 async function xeroGet(path: string, accessToken: string, tenantId: string): Promise<Record<string, unknown>> {

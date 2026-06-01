@@ -61,7 +61,7 @@ const COMMITTED: Job[] = [
   { value: 34343, bus: 0, cashY: 2026, cashM: 9, busY: null, busM: null }, // Oct
 ];
 
-export function buildForecast(a: ForecastAssumptions): Forecast {
+export function buildForecast(a: ForecastAssumptions, opts: { conservative?: boolean } = {}): Forecast {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const horizon = Array.from({ length: 12 }, (_, i) => {
@@ -70,9 +70,11 @@ export function buildForecast(a: ForecastAssumptions): Forecast {
   });
 
   // Funnel: leads → won → installs (1-month lag, capped) → revenue.
+  // Conservative scenario: lower conversion + marketing realism -> ~35% fewer wins.
+  const scenarioFactor = opts.conservative ? 0.65 : 1;
   const won = horizon.map(({ mo }) => {
     const leads = (MARKETING[mo] / CPL + OTHER_LEADS) * SEASONAL[mo];
-    return leads * ENGAGED_PCT[mo] * 0.97 * 0.96 * WON_PCT;
+    return leads * ENGAGED_PCT[mo] * 0.97 * 0.96 * WON_PCT * scenarioFactor;
   });
   const installs = horizon.map((_, i) => (i === 0 ? 0 : Math.min(won[i - 1], CAPACITY)));
   const revenue = installs.map((x) => x * AVG_JOB);
@@ -138,4 +140,29 @@ export function buildForecast(a: ForecastAssumptions): Forecast {
 
 function r(n: number): number {
   return Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
+}
+
+// Shared model defaults + input builder so the cockpit and forecast page agree.
+export const FORECAST_DEFAULTS = {
+  openingCash: 45000,        // placeholder until live Xero cash
+  monthlyOverheadsBase: 8850, // fixed opex excl. drawings/marketing
+  ownerDrawings: 4191,
+  capitalOnTap: 51644,
+};
+
+export function forecastInputs(args: {
+  cash: number | null;
+  receivables: number | null;
+  overdue: number | null;
+  openingCashOverride?: number | null;
+  capitalOnTap?: number | null;
+}): ForecastAssumptions {
+  return {
+    openingCash: args.openingCashOverride ?? args.cash ?? FORECAST_DEFAULTS.openingCash,
+    existingReceivables: args.receivables ?? 0,
+    overdueReceivables: args.overdue ?? 0,
+    monthlyOverheadsBase: FORECAST_DEFAULTS.monthlyOverheadsBase,
+    ownerDrawings: FORECAST_DEFAULTS.ownerDrawings,
+    capitalOnTapOpening: args.capitalOnTap ?? FORECAST_DEFAULTS.capitalOnTap,
+  };
 }

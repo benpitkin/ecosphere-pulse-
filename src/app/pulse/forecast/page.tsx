@@ -34,7 +34,17 @@ async function configValue<T>(): Promise<{ overheadsBase: number; cot: number }>
 }
 
 export default async function ForecastPage() {
-  const xero = await getXeroSnapshot();
+  let xero: { cash: number | null; receivables: number | null; overdue: number | null } = {
+    cash: null,
+    receivables: null,
+    overdue: null,
+  };
+  try {
+    const snap = await getXeroSnapshot();
+    xero = { cash: snap.cash, receivables: snap.receivables, overdue: snap.overdue };
+  } catch {
+    /* fall back to model defaults below */
+  }
   const cfg = await configValue();
 
   const f = buildForecast({

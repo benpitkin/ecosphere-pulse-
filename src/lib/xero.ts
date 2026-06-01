@@ -63,19 +63,23 @@ async function getAuth(): Promise<
   if (!clientId || !clientSecret) return { ok: false, error: "env: missing XERO_CLIENT_ID/SECRET" };
 
   const admin = createAdminClient();
-  // Read ONLY the minimal, reliable columns. Including tenant_name/access_token
-  // in this select was intermittently returning zero rows on this stack, so we
-  // keep the gating read tiny and refresh the access token fresh each call.
-  let conn: { tenant_id: string | null; refresh_token: string | null } | null = null;
+  // Read with a short retry (first read in a request can come back empty).
+  type Row = {
+    tenant_id: string | null;
+    refresh_token: string | null;
+    access_token: string | null;
+    access_expires_at: string | null;
+  };
+  let conn: Row | null = null;
   let lastErr: string | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     const { data, error } = await admin
       .from("xero_connection")
-      .select("tenant_id, refresh_token")
+      .select("tenant_id, refresh_token, access_token, access_expires_at")
       .eq("id", true)
       .maybeSingle();
     if (data) {
-      conn = data as { tenant_id: string | null; refresh_token: string | null };
+      conn = data as Row;
       break;
     }
     lastErr = error?.message ?? null;
@@ -85,8 +89,18 @@ async function getAuth(): Promise<
     return { ok: false, error: lastErr ?? "no Xero connection stored" };
   }
 
-  // Always refresh to obtain a valid access token. Xero rotates the refresh
-  // token, so persist whatever comes back.
+  // Reuse the cached access token while it's still valid (2-min safety margin).
+  // Only refresh when it's near expiry — refreshing every call rotates the
+  // refresh token and breaks under concurrent requests.
+  if (
+    conn.access_token &&
+    conn.access_expires_at &&
+    new Date(conn.access_expires_at).getTime() - Date.now() > 120_000
+  ) {
+    return { ok: true, accessToken: conn.access_token, tenantId: conn.tenant_id, tenantName: null };
+  }
+
+  // Refresh — Xero rotates the refresh token, so persist whatever comes back.
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   let body: { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
   try {

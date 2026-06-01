@@ -20,14 +20,17 @@ export async function GET() {
     );
   }
   const state = crypto.randomUUID();
-  const url = new URL(AUTHORIZE_URL);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("client_id", clientId);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", SCOPES);
-  url.searchParams.set("state", state);
+  // Build the query manually so scope spaces encode as %20 (Xero rejects the
+  // "+" that URLSearchParams would produce as an invalid_scope).
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    state,
+  });
+  const authUrl = `${AUTHORIZE_URL}?${params.toString()}&scope=${encodeURIComponent(SCOPES)}`;
 
-  const res = NextResponse.redirect(url.toString());
+  const res = NextResponse.redirect(authUrl);
   res.cookies.set("xero_oauth_state", state, {
     httpOnly: true,
     secure: true,

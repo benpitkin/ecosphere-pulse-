@@ -60,7 +60,7 @@ async function getAuth(): Promise<
 > {
   const clientId = process.env.XERO_CLIENT_ID;
   const clientSecret = process.env.XERO_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return { ok: false };
+  if (!clientId || !clientSecret) return { ok: false, error: "env: missing XERO_CLIENT_ID/SECRET" };
 
   const admin = createAdminClient();
   // Read with a short retry: at cold start the first Supabase call in a

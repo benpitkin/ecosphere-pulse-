@@ -77,11 +77,12 @@ const SEVERITY_RANK: Record<ActionSeverity, number> = { critical: 0, warning: 1,
 
 /** Build the full Pulse: fetch both sides, compute metrics, derive actions. */
 export async function buildPulse(): Promise<Pulse> {
-  const [xero, pipeline, config] = await Promise.all([
-    getXeroSnapshot(),
-    fetchPipelineSummary(),
-    loadConfig(),
-  ]);
+  // Run sequentially, not in Promise.all: concurrent Supabase reads at request
+  // start were intermittently coming back empty on this serverless setup,
+  // making a live Xero connection look unconfigured.
+  const xero = await getXeroSnapshot();
+  const config = await loadConfig();
+  const pipeline = await fetchPipelineSummary();
 
   const cash = xero.cash;
   const availableLiquidity =

@@ -21,12 +21,12 @@ export default function PulseLayout({ children }: { children: React.ReactNode })
             <NavLink href="/pulse" label="Cockpit" />
             <NavLink href="/pulse/forecast" label="Forecast" />
             <NavLink href="/pulse/settings" label="Settings" />
-            <Link
+            <a
               href="/api/logout"
               className="ml-2 rounded-md px-3 py-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               Sign out
-            </Link>
+            </a>
           </nav>
         </div>
       </header>

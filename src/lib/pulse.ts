@@ -106,6 +106,12 @@ export async function buildPulse(): Promise<Pulse> {
     });
   } else if (xero.error) {
     actions.push({ severity: "warning", title: "Xero sync issue", detail: xero.error });
+  } else if (xero.cash == null) {
+    actions.push({
+      severity: "info",
+      title: "Cash & equity pending Xero permission",
+      detail: "Receivables are live. Cash, working capital and net equity need the Xero reports permission for this app — once granted they'll appear automatically.",
+    });
   }
   if (!pipeline.configured) {
     actions.push({

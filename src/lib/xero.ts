@@ -182,48 +182,44 @@ export async function getXeroSnapshot(): Promise<XeroSnapshot> {
 
   const today = new Date().toISOString().slice(0, 10);
   try {
-    const [bs, inv] = await Promise.all([
-      xeroGet("/Reports/BalanceSheet", auth.accessToken, auth.tenantId),
-      // summaryOnly keeps the payload small; we only need AmountDue + DueDate.
-      xeroGet(`/Invoices?where=${encodeURIComponent('Type=="ACCREC"')}&Statuses=AUTHORISED&summaryOnly=true`, auth.accessToken, auth.tenantId),
-    ]);
-
-    // ---- Balance sheet -> cash / working capital / equity ------------------
-    const reports = (bs.Reports as Array<{ Rows?: ReportRow[] }> | undefined) ?? [];
-    const idx = new Map<string, number>();
-    indexRows(reports[0]?.Rows, idx);
-
-    const cash = pick(idx, ["total bank", "bank"]);
-    const currentAssets = pick(idx, ["total current assets"]);
-    const currentLiabilities = pick(idx, ["total current liabilities"]);
-    const netEquity = pick(idx, ["total equity", "net assets"]);
-    const workingCapital =
-      currentAssets != null && currentLiabilities != null ? currentAssets - currentLiabilities : null;
-
-    // ---- Invoices -> receivables + overdue ---------------------------------
-    const invoices = (inv.Invoices as Array<{ AmountDue?: number; DueDate?: string }> | undefined) ?? [];
+    // Receivables + overdue come from each contact's AR balance. This works
+    // with the accounting.contacts.read scope. Cash, working capital and net
+    // equity need the Balance Sheet report (accounting.reports.read), which
+    // this Xero app is not yet entitled to — left null until that's granted.
     let receivables = 0;
     let overdue = 0;
-    for (const i of invoices) {
-      const due = Number(i.AmountDue) || 0;
-      receivables += due;
-      // Xero serialises DueDate as "/Date(…)/" or ISO depending on Accept; handle both.
-      const dd = parseXeroDate(i.DueDate);
-      if (dd && dd < today && due > 0) overdue += due;
+    for (let page = 1; page <= 20; page++) {
+      const body = await xeroGet(`/Contacts?page=${page}`, auth.accessToken, auth.tenantId);
+      const contacts = (body.Contacts as Array<Record<string, unknown>> | undefined) ?? [];
+      if (!contacts.length) break;
+      for (const c of contacts) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ar = (c as any)?.Balances?.AccountsReceivable;
+        if (ar) {
+          receivables += Number(ar.Outstanding) || 0;
+          overdue += Number(ar.Overdue) || 0;
+        }
+      }
+      if (contacts.length < 100) break;
     }
 
     return {
       configured: true,
-      cash,
+      cash: null,
       receivables: Math.round(receivables * 100) / 100,
       overdue: Math.round(overdue * 100) / 100,
-      working_capital: workingCapital,
-      net_equity: netEquity,
+      working_capital: null,
+      net_equity: null,
       snapshot_date: today,
       tenant_name: auth.tenantName,
     };
   } catch (e) {
-    return { ...EMPTY, configured: true, tenant_name: auth.tenantName, error: e instanceof Error ? e.message : String(e) };
+    return {
+      ...EMPTY,
+      configured: true,
+      tenant_name: auth.tenantName,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 

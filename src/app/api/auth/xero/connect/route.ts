@@ -4,9 +4,11 @@ export const dynamic = "force-dynamic";
 
 const AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize";
 const SCOPES = [
+  "openid",
+  "profile",
+  "email",
   "offline_access",
-  "accounting.reports.read",
-  "accounting.transactions.read",
+  "accounting.contacts.read",
   "accounting.settings.read",
 ].join(" ");
 

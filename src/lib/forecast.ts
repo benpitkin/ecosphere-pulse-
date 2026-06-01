@@ -61,7 +61,10 @@ const COMMITTED: Job[] = [
   { value: 34343, bus: 0, cashY: 2026, cashM: 9, busY: null, busM: null }, // Oct
 ];
 
-export function buildForecast(a: ForecastAssumptions, opts: { conservative?: boolean } = {}): Forecast {
+export function buildForecast(
+  a: ForecastAssumptions,
+  opts: { conservative?: boolean; marketingScale?: number } = {},
+): Forecast {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const horizon = Array.from({ length: 12 }, (_, i) => {
@@ -69,11 +72,15 @@ export function buildForecast(a: ForecastAssumptions, opts: { conservative?: boo
     return { mo: d.getMonth(), year: d.getFullYear(), label: `${MONTH_NAMES[d.getMonth()]}-${String(d.getFullYear()).slice(2)}` };
   });
 
+  // Marketing lever: scales spend up/down. Affects both lead gen and outflow.
+  const mktScale = opts.marketingScale ?? 1;
+  const mkt = (mo: number) => MARKETING[mo] * mktScale;
+
   // Funnel: leads → won → installs (1-month lag, capped) → revenue.
   // Conservative scenario: lower conversion + marketing realism -> ~35% fewer wins.
   const scenarioFactor = opts.conservative ? 0.65 : 1;
   const won = horizon.map(({ mo }) => {
-    const leads = (MARKETING[mo] / CPL + OTHER_LEADS) * SEASONAL[mo];
+    const leads = (mkt(mo) / CPL + OTHER_LEADS) * SEASONAL[mo];
     return leads * ENGAGED_PCT[mo] * 0.97 * 0.96 * WON_PCT * scenarioFactor;
   });
   const installs = horizon.map((_, i) => (i === 0 ? 0 : Math.min(won[i - 1], CAPACITY)));
@@ -104,7 +111,7 @@ export function buildForecast(a: ForecastAssumptions, opts: { conservative?: boo
 
     // OUTFLOWS
     const natashaUplift = i >= 2 ? 1244 : 0;
-    const fixed = a.monthlyOverheadsBase + a.ownerDrawings + MARKETING[mo] + natashaUplift;
+    const fixed = a.monthlyOverheadsBase + a.ownerDrawings + mkt(mo) + natashaUplift;
     const installedRevenue = revenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
     const variable = installedRevenue * COGS_PCT + installs[i] * DNO_MCS + inflows * BANK_FEE_PCT;
     const cotDD = Math.max(cot * 0.1, 0);
@@ -144,10 +151,10 @@ function r(n: number): number {
 
 // Shared model defaults + input builder so the cockpit and forecast page agree.
 export const FORECAST_DEFAULTS = {
-  openingCash: 45000,        // placeholder until live Xero cash
-  monthlyOverheadsBase: 8850, // fixed opex excl. drawings/marketing
-  ownerDrawings: 4191,
-  capitalOnTap: 51644,
+  openingCash: 45000,         // placeholder until live Xero cash
+  monthlyOverheadsBase: 8850,  // fixed opex excl. drawings/marketing
+  ownerDrawings: 2000,         // Ben's CURRENT take-home draw (the £4k is a scenario)
+  capitalOnTap: 51644,         // CoT DEBT opening balance (paid down 10%/mo) — not headroom
 };
 
 export function forecastInputs(args: {
@@ -155,6 +162,7 @@ export function forecastInputs(args: {
   receivables: number | null;
   overdue: number | null;
   openingCashOverride?: number | null;
+  ownerDrawings?: number | null;
   capitalOnTap?: number | null;
 }): ForecastAssumptions {
   return {
@@ -162,7 +170,7 @@ export function forecastInputs(args: {
     existingReceivables: args.receivables ?? 0,
     overdueReceivables: args.overdue ?? 0,
     monthlyOverheadsBase: FORECAST_DEFAULTS.monthlyOverheadsBase,
-    ownerDrawings: FORECAST_DEFAULTS.ownerDrawings,
+    ownerDrawings: args.ownerDrawings ?? FORECAST_DEFAULTS.ownerDrawings,
     capitalOnTapOpening: args.capitalOnTap ?? FORECAST_DEFAULTS.capitalOnTap,
   };
 }

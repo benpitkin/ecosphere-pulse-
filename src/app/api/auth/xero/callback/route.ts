@@ -57,16 +57,29 @@ export async function GET(req: Request) {
 
   const admin = createAdminClient();
   const expiresAt = new Date(Date.now() + (tok.expires_in ?? 1800) * 1000).toISOString();
-  await admin.from("xero_connection").upsert({
-    id: true,
-    tenant_id: tenantId,
-    tenant_name: tenantName,
-    refresh_token: tok.refresh_token,
-    access_token: tok.access_token,
-    access_expires_at: expiresAt,
-    connected_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  });
+  const { error: upsertErr } = await admin
+    .from("xero_connection")
+    .upsert(
+      {
+        id: true,
+        tenant_id: tenantId,
+        tenant_name: tenantName,
+        refresh_token: tok.refresh_token,
+        access_token: tok.access_token,
+        access_expires_at: expiresAt,
+        connected_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    );
+  if (upsertErr) {
+    return NextResponse.redirect(
+      `${siteUrl}/pulse?xero=error&detail=${encodeURIComponent(upsertErr.message)}`,
+    );
+  }
+  if (!tok.refresh_token) {
+    return NextResponse.redirect(`${siteUrl}/pulse?xero=error&detail=no_refresh_token`);
+  }
 
   const res = NextResponse.redirect(`${siteUrl}/pulse?xero=connected`);
   res.cookies.set("xero_oauth_state", "", { maxAge: 0, path: "/" });

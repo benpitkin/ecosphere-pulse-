@@ -222,13 +222,34 @@ export async function getXeroSnapshot(): Promise<XeroSnapshot> {
       if (contacts.length < 100) break;
     }
 
+    // Cash / working capital / net equity from the Balance Sheet report.
+    // Granular scope: accounting.reports.balancesheet.read.
+    let cash: number | null = null;
+    let working_capital: number | null = null;
+    let net_equity: number | null = null;
+    try {
+      const bs = await xeroGet("/Reports/BalanceSheet", auth.accessToken, auth.tenantId);
+      const reports = (bs.Reports as Array<{ Rows?: ReportRow[] }> | undefined) ?? [];
+      const idx = new Map<string, number>();
+      indexRows(reports[0]?.Rows, idx);
+      cash = pick(idx, ["total bank", "bank", "cash at bank"]);
+      net_equity = pick(idx, ["total equity", "net assets"]);
+      const ca = pick(idx, ["total current assets"]);
+      const cl = pick(idx, ["total current liabilities"]);
+      working_capital =
+        pick(idx, ["net current assets", "working capital"]) ??
+        (ca != null && cl != null ? Math.round((ca - Math.abs(cl)) * 100) / 100 : null);
+    } catch {
+      /* report unavailable — leave nulls */
+    }
+
     return {
       configured: true,
-      cash: null,
+      cash,
       receivables: Math.round(receivables * 100) / 100,
       overdue: Math.round(overdue * 100) / 100,
-      working_capital: null,
-      net_equity: null,
+      working_capital,
+      net_equity,
       snapshot_date: today,
       tenant_name: auth.tenantName,
     };

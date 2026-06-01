@@ -10,6 +10,8 @@ const SCOPES = [
   "offline_access",
   "accounting.contacts.read",
   "accounting.settings.read",
+  "accounting.reports.balancesheet.read",
+  "accounting.reports.profitandloss.read",
 ].join(" ");
 
 export async function GET() {

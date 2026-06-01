@@ -48,11 +48,25 @@ interface PipelineStage {
   position?: number;
 }
 
-/** Default weight ladder by stage index across the pipeline (0 = first stage). */
-function defaultWeight(index: number, total: number): number {
-  if (total <= 1) return 0.5;
-  // Linear 0.2 -> 0.9 across the stages; tune via GHL_STAGE_WEIGHTS.
-  return Math.round((0.2 + (0.7 * index) / (total - 1)) * 100) / 100;
+/** Win-probability weight by stage NAME. Terminal/dead/won stages -> 0 (not
+ *  open future revenue); active funnel stages ramp up toward the proposal.
+ *  Override any stage precisely via GHL_STAGE_WEIGHTS env. */
+function stageWeight(name: string): number {
+  const n = (name || "").toLowerCase();
+  // Dead / lost / unqualified — excluded from the forecast.
+  if (/lost|dead|unqualified|not proceeding|gone cold|cancel|closed/.test(n)) return 0;
+  // Post-sale / won-and-delivered — not open pipeline.
+  if (/ongoing|aftercare|service plan|install complete|installation complete|handover|nurture/.test(n)) return 0;
+  // Accepted / deposit / install booked — effectively won.
+  if (/accepted|install pending|deposit|installation booked|quote accepted|won/.test(n)) return 0.9;
+  if (/proposal|quote sent/.test(n)) return 0.5;
+  if (/survey completed/.test(n)) return 0.45;
+  if (/survey booked/.test(n)) return 0.35;
+  if (/survey|awaiting quote/.test(n)) return 0.25;
+  if (/engaged|contacted|callback/.test(n)) return 0.15;
+  if (/contact attempt|follow up|follow-up|no contact|contact attempted/.test(n)) return 0.1;
+  if (/new enquiry|new lead|uncontacted/.test(n)) return 0.05;
+  return 0.15; // unknown active stage
 }
 
 async function ghlFetch(path: string): Promise<Record<string, unknown>> {
@@ -132,15 +146,22 @@ export async function fetchPipelineSummary(): Promise<PipelineSummary> {
     return { ...EMPTY, configured: true, pipeline_name: pipelineName, error: e instanceof Error ? e.message : String(e) };
   }
 
-  // Build per-stage summary in pipeline order, applying weights.
+  // Build per-stage summary, applying name-based weights. Headline open
+  // count/value reflect ACTIVE stages only (weight > 0) so dead/lost/won
+  // stages don't inflate the pipeline; all stages still appear in the table.
   const stageSummaries: StageSummary[] = [];
   let weightedTotal = 0;
-  const total = stages.length || byStage.size;
-  stages.forEach((s, i) => {
+  let activeCount = 0;
+  let activeValue = 0;
+  stages.forEach((s) => {
     const agg = byStage.get(s.id) ?? { count: 0, value: 0 };
-    const weight = overrides[s.id] ?? defaultWeight(i, total);
+    const weight = overrides[s.id] ?? stageWeight(s.name);
     const weighted = Math.round(agg.value * weight * 100) / 100;
     weightedTotal += weighted;
+    if (weight > 0) {
+      activeCount += agg.count;
+      activeValue += agg.value;
+    }
     stageSummaries.push({
       stage_id: s.id,
       stage_name: s.name,
@@ -154,8 +175,8 @@ export async function fetchPipelineSummary(): Promise<PipelineSummary> {
   return {
     configured: true,
     pipeline_name: pipelineName,
-    open_count: openCount,
-    open_value: Math.round(openValue * 100) / 100,
+    open_count: activeCount,
+    open_value: Math.round(activeValue * 100) / 100,
     weighted_value: Math.round(weightedTotal * 100) / 100,
     stages: stageSummaries,
   };

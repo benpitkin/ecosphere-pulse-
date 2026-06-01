@@ -47,14 +47,25 @@ export default async function ForecastPage() {
   }
   const cfg = await configValue();
 
-  const f = buildForecast({
-    openingCash: xero.cash ?? MODEL.openingCash,
-    existingReceivables: xero.receivables ?? 0,
-    overdueReceivables: xero.overdue ?? 0,
-    monthlyOverheadsBase: cfg.overheadsBase,
-    ownerDrawings: MODEL.ownerDrawings,
-    capitalOnTapOpening: cfg.cot,
-  });
+  let f;
+  try {
+    f = buildForecast({
+      openingCash: xero.cash ?? MODEL.openingCash,
+      existingReceivables: xero.receivables ?? 0,
+      overdueReceivables: xero.overdue ?? 0,
+      monthlyOverheadsBase: cfg.overheadsBase,
+      ownerDrawings: MODEL.ownerDrawings,
+      capitalOnTapOpening: cfg.cot,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? (e.stack || e.message) : String(e);
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <h1 className="mb-3 text-lg font-bold">Forecast error</h1>
+        <pre className="whitespace-pre-wrap rounded-md border border-border bg-white p-4 text-xs text-red-600">{msg}</pre>
+      </div>
+    );
+  }
 
   const liveCash = xero.cash != null;
 

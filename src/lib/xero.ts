@@ -63,14 +63,27 @@ async function getAuth(): Promise<
   if (!clientId || !clientSecret) return { ok: false };
 
   const admin = createAdminClient();
-  const { data } = await admin
-    .from("xero_connection")
-    .select("tenant_id, tenant_name, refresh_token, access_token, access_expires_at")
-    .eq("id", true)
-    .maybeSingle();
-
-  const conn = data as ConnRow | null;
-  if (!conn?.refresh_token || !conn.tenant_id) return { ok: false };
+  // Read with a short retry: at cold start the first Supabase call in a
+  // concurrent batch can come back empty, which would wrongly look like
+  // "not connected".
+  let conn: ConnRow | null = null;
+  let lastErr: string | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data, error } = await admin
+      .from("xero_connection")
+      .select("tenant_id, tenant_name, refresh_token, access_token, access_expires_at")
+      .eq("id", true)
+      .maybeSingle();
+    if (data) {
+      conn = data as ConnRow;
+      break;
+    }
+    lastErr = error?.message ?? null;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  if (!conn?.refresh_token || !conn.tenant_id) {
+    return { ok: false, error: lastErr ?? "no Xero connection stored" };
+  }
 
   // Reuse a still-fresh access token (60s safety margin).
   if (

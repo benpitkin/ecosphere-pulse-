@@ -48,7 +48,6 @@ export default async function PulsePage() {
       cash: pulse.xero.cash,
       receivables: m.receivables,
       overdue: m.overdue,
-      capitalOnTap: pulse.config.capital_on_tap_gbp,
     }),
   );
   const insights = buildInsights(pulse, forecast);

@@ -63,6 +63,10 @@ export default async function PulsePage() {
               Connect Xero <ArrowRight size={15} />
             </Link>
           ) : null}
+          <Link href="/pulse/forecast"
+            className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted">
+            Forecast
+          </Link>
           <Link href="/pulse/settings"
             className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted">
             Settings

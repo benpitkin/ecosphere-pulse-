@@ -52,7 +52,7 @@ export interface Pulse {
 
 // Defaults sourced from EcoSphere_Cashflow_Model.xlsx so overheads/runway work
 // without manual entry. Replaced by live Xero P&L once the reports permission lands.
-const MODEL_OVERHEADS = 17000;     // total monthly cash overheads (fixed opex + drawings + marketing)
+const MODEL_OVERHEADS = 8850;     // fixed running overheads (payroll + bills), excl. drawings + marketing
 const MODEL_OPENING_CASH = 45000;  // placeholder bank balance until live cash is available
 
 const DEFAULT_CONFIG: PulseConfig = {

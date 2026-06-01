@@ -43,10 +43,17 @@ export interface Pulse {
     net_equity: number | null;
     available_liquidity: number | null; // cash + confirmed facility headroom
     runway_months: number | null;       // available_liquidity / monthly_overheads
+    overheads_used: number;             // monthly overheads actually used (config or model default)
+    runway_is_estimate: boolean;        // true when opening cash is the model placeholder
     pipeline_gap: number | null;         // weighted pipeline - target
   };
   actions: PulseAction[];
 }
+
+// Defaults sourced from EcoSphere_Cashflow_Model.xlsx so overheads/runway work
+// without manual entry. Replaced by live Xero P&L once the reports permission lands.
+const MODEL_OVERHEADS = 17000;     // total monthly cash overheads (fixed opex + drawings + marketing)
+const MODEL_OPENING_CASH = 45000;  // placeholder bank balance until live cash is available
 
 const DEFAULT_CONFIG: PulseConfig = {
   monthly_overheads: 0,
@@ -85,12 +92,14 @@ export async function buildPulse(): Promise<Pulse> {
   const pipeline = await fetchPipelineSummary();
 
   const cash = xero.cash;
+  // Overheads default from the model when not set; cash falls back to the model
+  // opening balance until live cash is available (reports permission).
+  const overheadsUsed = config.monthly_overheads > 0 ? config.monthly_overheads : MODEL_OVERHEADS;
+  const cashForRunway = cash != null ? cash : MODEL_OPENING_CASH;
+  const runwayIsEstimate = cash == null;
   const availableLiquidity =
-    cash != null ? Math.round((cash + (config.capital_on_tap_gbp || 0)) * 100) / 100 : null;
-  const runwayMonths =
-    availableLiquidity != null && config.monthly_overheads > 0
-      ? Math.round((availableLiquidity / config.monthly_overheads) * 10) / 10
-      : null;
+    Math.round((cashForRunway + (config.capital_on_tap_gbp || 0)) * 100) / 100;
+  const runwayMonths = Math.round((availableLiquidity / overheadsUsed) * 10) / 10;
   const pipelineGap =
     config.pipeline_target_gbp > 0 && pipeline.configured
       ? Math.round((pipeline.weighted_value - config.pipeline_target_gbp) * 100) / 100
@@ -125,19 +134,15 @@ export async function buildPulse(): Promise<Pulse> {
   }
 
   // ---- runway --------------------------------------------------------------
-  if (runwayMonths != null) {
-    if (runwayMonths < config.low_runway_months) {
-      actions.push({
-        severity: runwayMonths < config.low_runway_months / 2 ? "critical" : "warning",
-        title: `Runway is ${runwayMonths} months`,
-        detail: `Available liquidity of ${gbp(availableLiquidity)} against ${gbp(config.monthly_overheads)}/mo overheads is below the ${config.low_runway_months}-month floor. Review committed spend or accelerate collections.`,
-      });
-    }
-  } else if (xero.configured && config.monthly_overheads <= 0) {
+  if (runwayMonths < config.low_runway_months) {
     actions.push({
-      severity: "info",
-      title: "Set monthly overheads",
-      detail: "Runway can't be computed until monthly_overheads is set in Pulse config.",
+      severity: runwayMonths < config.low_runway_months / 2 ? "critical" : "warning",
+      title: `Runway is ${runwayMonths} months`,
+      detail:
+        `Available liquidity of ${gbp(availableLiquidity)} against ${gbp(overheadsUsed)}/mo overheads is below the ${config.low_runway_months}-month floor.` +
+        (runwayIsEstimate
+          ? " Estimate — opening cash uses the model figure until live Xero cash is available."
+          : " Review committed spend or accelerate collections."),
     });
   }
 
@@ -191,6 +196,8 @@ export async function buildPulse(): Promise<Pulse> {
       net_equity: xero.net_equity,
       available_liquidity: availableLiquidity,
       runway_months: runwayMonths,
+      overheads_used: overheadsUsed,
+      runway_is_estimate: runwayIsEstimate,
       pipeline_gap: pipelineGap,
     },
     actions,

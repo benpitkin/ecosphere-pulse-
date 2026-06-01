@@ -79,7 +79,7 @@ export default async function PulsePage() {
           sub={m.available_liquidity != null ? `${gbp(m.available_liquidity)} incl. facility headroom` : undefined}
           icon={<Banknote size={18} />} />
         <Tile label="Runway" value={m.runway_months != null ? `${m.runway_months} mo` : "—"}
-          sub={pulse.config.monthly_overheads > 0 ? `at ${gbp(pulse.config.monthly_overheads)}/mo overheads` : "set overheads in Settings"}
+          sub={`at ${gbp(m.overheads_used)}/mo overheads${m.runway_is_estimate ? " · est. (opening cash placeholder)" : ""}`}
           icon={<Gauge size={18} />} tone={runwayTone} />
         <Tile label="Overdue to chase" value={gbp(m.overdue)}
           sub={m.receivables != null ? `of ${gbp(m.receivables)} owed to you` : undefined}

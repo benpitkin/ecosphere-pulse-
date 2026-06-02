@@ -14,6 +14,13 @@ export interface ForecastAssumptions {
   capitalOnTapOpening: number;
 }
 
+export interface ForecastOpts {
+  conservative?: boolean;
+  marketingScale?: number;
+  clearCot?: boolean;   // apply the model's CoT clearance plan (£20k Aug, £15k Nov)
+  hire?: boolean;       // hire an installer from Sep-26 (+£2.6k/mo, +1 install/wk)
+}
+
 export interface ForecastMonth {
   label: string;
   inflows: number;
@@ -27,6 +34,7 @@ export interface Forecast {
   summary: { minCash: number; minCashMonth: string; closing: number; netGeneration: number };
   installs: number[];
   revenue: number[];
+  cotCleared: string | null;   // month label CoT hits zero, if it does in the window
 }
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -40,6 +48,8 @@ const BANK_FEE_PCT = 0.0227;
 const BUS_GRANT = 9000;
 const HP_SHARE = 0.9;
 const DNO_MCS = 65;
+const HIRE_COST = 2600;      // net + employer uplift, model Scenario 1
+const HIRE_CAPACITY = 4.33;  // +1 install/week
 
 // Drivers indexed by calendar month (0=Jan … 11=Dec), from the Lead Funnel tab.
 const MARKETING = [5000, 5000, 5000, 5000, 1936, 1936, 3000, 3000, 4000, 4000, 4000, 4000];
@@ -61,10 +71,10 @@ const COMMITTED: Job[] = [
   { value: 34343, bus: 0, cashY: 2026, cashM: 9, busY: null, busM: null }, // Oct
 ];
 
-export function buildForecast(
-  a: ForecastAssumptions,
-  opts: { conservative?: boolean; marketingScale?: number } = {},
-): Forecast {
+// Hire / clearance trigger from Sep-26 (calendar year 2026, month index 8 = Sep).
+const onFromSep26 = (year: number, mo: number) => year > 2026 || (year === 2026 && mo >= 8);
+
+export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): Forecast {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const horizon = Array.from({ length: 12 }, (_, i) => {
@@ -72,23 +82,23 @@ export function buildForecast(
     return { mo: d.getMonth(), year: d.getFullYear(), label: `${MONTH_NAMES[d.getMonth()]}-${String(d.getFullYear()).slice(2)}` };
   });
 
-  // Marketing lever: scales spend up/down. Affects both lead gen and outflow.
   const mktScale = opts.marketingScale ?? 1;
   const mkt = (mo: number) => MARKETING[mo] * mktScale;
 
-  // Funnel: leads → won → installs (1-month lag, capped) → revenue.
-  // Conservative scenario: lower conversion + marketing realism -> ~35% fewer wins.
+  // Funnel: leads → won → installs (1-month lag, capacity-capped) → revenue.
   const scenarioFactor = opts.conservative ? 0.65 : 1;
   const won = horizon.map(({ mo }) => {
     const leads = (mkt(mo) / CPL + OTHER_LEADS) * SEASONAL[mo];
     return leads * ENGAGED_PCT[mo] * 0.97 * 0.96 * WON_PCT * scenarioFactor;
   });
-  const installs = horizon.map((_, i) => (i === 0 ? 0 : Math.min(won[i - 1], CAPACITY)));
+  const capAt = (i: number) => CAPACITY + (opts.hire && onFromSep26(horizon[i].year, horizon[i].mo) ? HIRE_CAPACITY : 0);
+  const installs = horizon.map((_, i) => (i === 0 ? 0 : Math.min(won[i - 1], capAt(i))));
   const revenue = installs.map((x) => x * AVG_JOB);
 
   const months: ForecastMonth[] = [];
   let cash = a.openingCash;
   let cot = a.capitalOnTapOpening;
+  let cotCleared: string | null = null;
 
   horizon.forEach(({ mo, year, label }, i) => {
     // INFLOWS
@@ -110,13 +120,24 @@ export function buildForecast(
     const inflows = committedCash + committedBus + newWinsCash + busFromWins + receivables + vat;
 
     // OUTFLOWS
+    const hireOn = opts.hire && onFromSep26(year, mo);
     const natashaUplift = i >= 2 ? 1244 : 0;
-    const fixed = a.monthlyOverheadsBase + a.ownerDrawings + mkt(mo) + natashaUplift;
+    const fixed = a.monthlyOverheadsBase + a.ownerDrawings + mkt(mo) + natashaUplift + (hireOn ? HIRE_COST : 0);
     const installedRevenue = revenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
     const variable = installedRevenue * COGS_PCT + installs[i] * DNO_MCS + inflows * BANK_FEE_PCT;
+
+    // Capital on Tap: 10% minimum DD (matches deployed model), plus optional
+    // clearance lump-sums that pay down principal faster.
     const cotDD = Math.max(cot * 0.1, 0);
-    cot = Math.max(cot - cotDD, 0);
-    const finance = cotDD + (i < 11 ? 271 : 0) + 139;
+    let lump = 0;
+    if (opts.clearCot) {
+      if (year === 2026 && mo === 7) lump = Math.min(20000, Math.max(cot - cotDD, 0));   // Aug-26
+      if (year === 2026 && mo === 10) lump = Math.min(15000, Math.max(cot - cotDD, 0));  // Nov-26
+    }
+    cot = Math.max(cot - cotDD - lump, 0);
+    if (cot <= 0.5 && !cotCleared) cotCleared = label;
+    const finance = cotDD + lump + (i < 11 ? 271 : 0) + 139;
+
     let oneOffs = 0;
     if (i === 0) oneOffs += 2305; // MCS renewal
     if (mo === 10) oneOffs += 13000; // corporation tax (Nov)
@@ -142,6 +163,7 @@ export function buildForecast(
     },
     installs: installs.map((x) => Math.round(x * 10) / 10),
     revenue: revenue.map((x) => Math.round(x)),
+    cotCleared,
   };
 }
 
@@ -151,10 +173,10 @@ function r(n: number): number {
 
 // Shared model defaults + input builder so the cockpit and forecast page agree.
 export const FORECAST_DEFAULTS = {
-  openingCash: 45000,         // placeholder until live Xero cash
-  monthlyOverheadsBase: 8850,  // fixed opex excl. drawings/marketing
-  ownerDrawings: 2000,         // Ben's CURRENT take-home draw (the £4k is a scenario)
-  capitalOnTap: 51644,         // CoT DEBT opening balance (paid down 10%/mo) — not headroom
+  openingCash: 45000,
+  monthlyOverheadsBase: 8850,
+  ownerDrawings: 2000,
+  capitalOnTap: 51644,
 };
 
 export function forecastInputs(args: {

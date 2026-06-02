@@ -23,21 +23,23 @@ const MKT_PRESETS = [
 export default function ForecastExplorer({ cash, receivables, overdue, openingOverride }: Props) {
   const [drawings, setDrawings] = useState(2000);
   const [mktScale, setMktScale] = useState(1);
+  const [clearCot, setClearCot] = useState(false);
+  const [hire, setHire] = useState(false);
 
   // Selected scenario (base + conservative).
   const base = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { marketingScale: mktScale },
+      { marketingScale: mktScale, clearCot, hire },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, clearCot, hire],
   );
   const cons = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { conservative: true, marketingScale: mktScale },
+      { conservative: true, marketingScale: mktScale, clearCot, hire },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, clearCot, hire],
   );
 
   const liveCash = cash != null || openingOverride != null;
@@ -131,6 +133,29 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
             </p>
           </div>
         </div>
+
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
+          <button onClick={() => setClearCot((v) => !v)}
+            className={`rounded-md border px-3 py-1.5 text-xs font-medium ${clearCot ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:border-accent"}`}>
+            {clearCot ? "\u2713 " : ""}Clear Capital on Tap (£20k Aug, £15k Nov)
+          </button>
+          <button onClick={() => setHire((v) => !v)}
+            className={`rounded-md border px-3 py-1.5 text-xs font-medium ${hire ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:border-accent"}`}>
+            {hire ? "\u2713 " : ""}Hire an installer from Sep-26 (+£2.6k/mo)
+          </button>
+        </div>
+        {clearCot ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {base.cotCleared
+              ? `Capital on Tap cleared by ${base.cotCleared} — frees ~£5k/mo of repayments after that and saves ~£15\u201318k of interest (per your model). Cash dips as you pay it down.`
+              : "Lump-sums applied — see the dip and faster paydown."}
+          </p>
+        ) : null}
+        {hire ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Adds installer capacity from Sep-26. It only pays for itself once demand tops your current ~13 installs/mo — try it with marketing on Push or Aggressive.
+          </p>
+        ) : null}
 
         <div className={`mt-5 rounded-lg border px-4 py-3 text-sm ${verdictClr}`}>
           <span className="font-semibold">{gbp(drawings)}/mo draw: </span>{verdict.text}{" "}

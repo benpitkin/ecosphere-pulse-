@@ -181,3 +181,33 @@ export async function fetchPipelineSummary(): Promise<PipelineSummary> {
     stages: stageSummaries,
   };
 }
+
+/** Map of GHL opportunity id -> monetaryValue, across open + won opportunities
+ *  for the location. Used to value Dispatch jobs (which carry ghl_opportunity_id
+ *  but not the deal value). Best-effort: returns an empty map if GHL is unset. */
+export async function fetchOpportunityValueMap(): Promise<Map<string, number>> {
+  const apiKey = process.env.GHL_API_KEY;
+  const locationId = process.env.GHL_LOCATION_ID;
+  const map = new Map<string, number>();
+  if (!apiKey || !locationId) return map;
+  for (const status of ["open", "won"]) {
+    try {
+      for (let page = 1; page <= 5; page++) {
+        const body = await ghlFetch(
+          `/opportunities/search?location_id=${locationId}&status=${status}&limit=100&page=${page}`,
+        );
+        const opps = (body.opportunities as Array<Record<string, unknown>>) ?? [];
+        if (!opps.length) break;
+        for (const o of opps) {
+          const id = o.id as string;
+          const val = typeof o.monetaryValue === "number" ? (o.monetaryValue as number) : 0;
+          if (id && val > 0) map.set(id, val);
+        }
+        if (opps.length < 100) break;
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+  return map;
+}

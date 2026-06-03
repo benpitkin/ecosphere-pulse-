@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { createAdminClient } from "@/lib/supabase";
+import { fetchOpportunityValueMap } from "@/lib/ghl-pipeline";
 
 export interface ScheduledJob {
   id: string;
@@ -50,14 +51,14 @@ type JobRow = {
 
 /** Best-effort £ value: fixed price when set, otherwise estimated days × day rate. */
 function jobValue(r: JobRow): number | null {
-  if (r.fixed_price_pence != null && (r.pricing_mode === "fixed" || r.pricing_mode == null)) {
-    return Math.round(r.fixed_price_pence) / 100;
+  let v: number | null = null;
+  if (r.fixed_price_pence != null && r.fixed_price_pence > 0) {
+    v = Math.round(r.fixed_price_pence) / 100;
+  } else if (r.estimated_days != null && r.day_rate != null) {
+    const d = Math.round(Number(r.estimated_days) * Number(r.day_rate));
+    if (d > 0) v = d;
   }
-  if (r.estimated_days != null && r.day_rate != null) {
-    return Math.round(Number(r.estimated_days) * Number(r.day_rate));
-  }
-  if (r.fixed_price_pence != null) return Math.round(r.fixed_price_pence) / 100;
-  return null;
+  return v && v > 0 ? v : null;
 }
 
 /** Jobs scheduled in Dispatch (an install date is set), soonest first. */
@@ -80,6 +81,9 @@ export async function fetchScheduledInstalls(): Promise<ScheduledInstalls> {
   if (error) return { ...EMPTY, configured: true, error: error.message };
 
   const rows = (data ?? []) as JobRow[];
+  // Dispatch jobs don't store the deal value — pull it from the linked GHL
+  // opportunity where available.
+  const valueMap = await fetchOpportunityValueMap();
   const jobs: ScheduledJob[] = rows.map((r) => ({
     id: r.id,
     client_name: r.client_name,
@@ -89,7 +93,7 @@ export async function fetchScheduledInstalls(): Promise<ScheduledInstalls> {
     bus_status: r.bus_status,
     install_date: r.intended_start_date,
     start_time: r.start_time,
-    value: jobValue(r),
+    value: jobValue(r) ?? (r.ghl_opportunity_id ? valueMap.get(r.ghl_opportunity_id) ?? null : null),
     ghl_opportunity_id: r.ghl_opportunity_id,
   }));
 

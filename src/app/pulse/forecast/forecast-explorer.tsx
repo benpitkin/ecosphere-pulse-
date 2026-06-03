@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { gbp } from "@/lib/utils";
-import { buildForecast, forecastInputs } from "@/lib/forecast";
+import { buildForecast, forecastInputs, type CommittedJob } from "@/lib/forecast";
 
 interface Props {
   cash: number | null;
   receivables: number | null;
   overdue: number | null;
   openingOverride: number | null;
+  committed?: CommittedJob[];
 }
 
 const DRAW_PRESETS = [2000, 3000, 4000, 5000];
@@ -20,7 +21,7 @@ const MKT_PRESETS = [
   { label: "Aggressive", scale: 2 },
 ];
 
-export default function ForecastExplorer({ cash, receivables, overdue, openingOverride }: Props) {
+export default function ForecastExplorer({ cash, receivables, overdue, openingOverride, committed }: Props) {
   const [drawings, setDrawings] = useState(2000);
   const [mktScale, setMktScale] = useState(1);
   const [clearCot, setClearCot] = useState(false);
@@ -30,16 +31,16 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const base = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { marketingScale: mktScale, clearCot, hire },
+      { marketingScale: mktScale, clearCot, hire, committed },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale, clearCot, hire],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, clearCot, hire, committed],
   );
   const cons = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { conservative: true, marketingScale: mktScale, clearCot, hire },
+      { conservative: true, marketingScale: mktScale, clearCot, hire, committed },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale, clearCot, hire],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, clearCot, hire, committed],
   );
 
   const liveCash = cash != null || openingOverride != null;

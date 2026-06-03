@@ -1,6 +1,7 @@
 import { getXeroSnapshot } from "@/lib/xero";
 import { createAdminClient } from "@/lib/supabase";
 import ForecastExplorer from "./forecast-explorer";
+import { getCommittedJobs } from "@/lib/dispatch-jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function ForecastPage() {
     xero = { cash: snap.cash, receivables: snap.receivables, overdue: snap.overdue };
   } catch { /* defaults */ }
   const opening = await readOpening();
+  const committed = await getCommittedJobs();
 
   return (
     <ForecastExplorer
@@ -31,6 +33,7 @@ export default async function ForecastPage() {
       receivables={xero.receivables}
       overdue={xero.overdue}
       openingOverride={opening}
+      committed={committed}
     />
   );
 }

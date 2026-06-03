@@ -76,14 +76,17 @@ export async function fetchScheduledInstalls(): Promise<ScheduledInstalls> {
     .select(
       "id, client_name, postcode, job_type, status, bus_status, intended_start_date, start_time, pricing_mode, fixed_price_pence, estimated_days, day_rate, ghl_opportunity_id",
     )
-    .not("intended_start_date", "is", null)
-    .order("intended_start_date", { ascending: true });
+    .order("created_at", { ascending: true });
 
   if (error) return { ...EMPTY, configured: true, error: error.message };
 
-  const rows = (data ?? []) as JobRow[];
-  // Dispatch jobs don't store the deal value — pull it from the linked GHL
-  // opportunity where available.
+  // Show every live/accepted job — both scheduled (has an install date) and
+  // confirmed-but-not-yet-dated. Exclude only terminal statuses.
+  const TERMINAL = /cancel|lost|dead|complete|done|archiv|reject/i;
+  const rows = ((data ?? []) as JobRow[]).filter((r) => !TERMINAL.test(r.status || ""));
+
+  // The customer deal value lives in GHL (Dispatch's day_rate is operational),
+  // so prefer the linked GHL opportunity value, falling back to Dispatch pricing.
   const valueMap = await fetchOpportunityValueMap();
   const jobs: ScheduledJob[] = rows.map((r) => ({
     id: r.id,
@@ -94,12 +97,21 @@ export async function fetchScheduledInstalls(): Promise<ScheduledInstalls> {
     bus_status: r.bus_status,
     install_date: r.intended_start_date,
     start_time: r.start_time,
-    value: jobValue(r) ?? (r.ghl_opportunity_id ? valueMap.get(r.ghl_opportunity_id) ?? null : null),
+    value: (r.ghl_opportunity_id ? valueMap.get(r.ghl_opportunity_id) ?? null : null) ?? jobValue(r),
     ghl_opportunity_id: r.ghl_opportunity_id,
   }));
 
+  // Sort: scheduled jobs first by install date, then undated (date TBC).
+  jobs.sort((a, b) => {
+    if (a.install_date && b.install_date) return a.install_date < b.install_date ? -1 : 1;
+    if (a.install_date) return -1;
+    if (b.install_date) return 1;
+    return (a.client_name || "").localeCompare(b.client_name || "");
+  });
+
   const total_value = jobs.reduce((a, j) => a + (j.value ?? 0), 0);
-  const next_date = jobs.length ? jobs[0].install_date : null;
+  const dated = jobs.filter((j) => j.install_date);
+  const next_date = dated.length ? dated[0].install_date : null;
 
   return { configured: true, jobs, total_value, next_date };
 }

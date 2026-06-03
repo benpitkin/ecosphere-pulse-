@@ -8,13 +8,14 @@ export const dynamic = "force-dynamic";
 type Cfg = {
   monthly_overheads: number; low_runway_months: number; overdue_alert_gbp: number;
   pipeline_target_gbp: number; capital_on_tap_gbp: number;
+  owner_drawings_gbp: number; opening_cash_gbp: number;
 };
 
 async function loadConfig(): Promise<Cfg> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("pulse_config")
-    .select("monthly_overheads, low_runway_months, overdue_alert_gbp, pipeline_target_gbp, capital_on_tap_gbp")
+    .select("monthly_overheads, low_runway_months, overdue_alert_gbp, pipeline_target_gbp, capital_on_tap_gbp, owner_drawings_gbp, opening_cash_gbp")
     .eq("id", true)
     .maybeSingle();
   return {
@@ -23,6 +24,8 @@ async function loadConfig(): Promise<Cfg> {
     overdue_alert_gbp: Number(data?.overdue_alert_gbp) || 0,
     pipeline_target_gbp: Number(data?.pipeline_target_gbp) || 0,
     capital_on_tap_gbp: Number(data?.capital_on_tap_gbp) || 0,
+    owner_drawings_gbp: Number(data?.owner_drawings_gbp) || 2000,
+    opening_cash_gbp: Number(data?.opening_cash_gbp) || 0,
   };
 }
 
@@ -37,6 +40,8 @@ async function saveConfig(formData: FormData) {
     overdue_alert_gbp: num("overdue_alert_gbp"),
     pipeline_target_gbp: num("pipeline_target_gbp"),
     capital_on_tap_gbp: num("capital_on_tap_gbp"),
+    owner_drawings_gbp: num("owner_drawings_gbp"),
+    opening_cash_gbp: num("opening_cash_gbp"),
     updated_at: new Date().toISOString(),
   });
   redirect("/pulse?saved=1");
@@ -75,6 +80,10 @@ export default async function PulseSettingsPage() {
             hint="Your forecast target for the period; flags a gap if pipeline is below it." value={cfg.pipeline_target_gbp} />
           <Field name="capital_on_tap_gbp" label="Facility headroom — Capital on Tap (£)"
             hint="Manually-confirmed available facility. Added to cash for runway." value={cfg.capital_on_tap_gbp} />
+          <Field name="owner_drawings_gbp" label="Your monthly take-home (£)"
+            hint="Your current draw. Sets the starting point for the forecast's take-home slider." value={cfg.owner_drawings_gbp} />
+          <Field name="opening_cash_gbp" label="Opening cash override (£)"
+            hint="Leave 0 to use live Xero cash. Set a value only to override the forecast's starting cash." value={cfg.opening_cash_gbp} />
           <button type="submit"
             className="rounded-md bg-foreground px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
             Save

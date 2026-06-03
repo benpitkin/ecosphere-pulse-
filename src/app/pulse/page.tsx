@@ -1,13 +1,13 @@
 import Link from "next/link";
 import {
   Banknote, TrendingUp, AlertTriangle, Wallet, Gauge, ArrowRight, CircleDot,
-  Lightbulb, CheckCircle2, AlertCircle, Info,
+  Lightbulb, CheckCircle2, AlertCircle, Info, CalendarClock,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { gbp } from "@/lib/utils";
 import { buildPulse } from "@/lib/pulse";
 import { buildForecast, forecastInputs } from "@/lib/forecast";
-import { getCommittedJobs } from "@/lib/dispatch-jobs";
+import { getCommittedJobs, fetchScheduledInstalls } from "@/lib/dispatch-jobs";
 import { buildInsights, type InsightTone } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +43,10 @@ function Tile({ label, value, sub, icon, tone = "default" }: {
 export default async function PulsePage() {
   const pulse = await buildPulse();
   const committed = await getCommittedJobs();
+  const installs = await fetchScheduledInstalls();
+  const nextInstall = installs.next_date
+    ? new Date(installs.next_date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+    : null;
   const m = pulse.metrics;
   const xeroLive = pulse.xero.configured;
   const forecast = buildForecast(
@@ -126,6 +130,10 @@ export default async function PulsePage() {
           icon={<TrendingUp size={18} />} tone="good" />
         <Tile label="Net equity" value={gbp(m.net_equity)}
           sub="total assets − total liabilities" icon={<CircleDot size={18} />} />
+        <Tile label="Booked installs"
+          value={installs.jobs.length ? gbp(installs.total_value) : "—"}
+          sub={installs.jobs.length ? `${installs.jobs.length} scheduled · next ${nextInstall}` : "none scheduled in Dispatch"}
+          icon={<CalendarClock size={18} />} tone={installs.jobs.length ? "good" : "default"} />
       </div>
 
       {/* Sales funnel */}

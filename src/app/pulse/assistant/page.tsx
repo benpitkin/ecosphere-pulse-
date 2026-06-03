@@ -51,6 +51,20 @@ export default function AssistantPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  // Load any saved history once on mount (no-op if persistence isn't enabled).
+  useEffect(() => {
+    let active = true;
+    fetch("/api/assistant")
+      .then((r) => r.json())
+      .then((d) => {
+        if (active && Array.isArray(d.messages) && d.messages.length) setMessages(d.messages);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   async function send(text: string) {
     const content = text.trim();
     if (!content || loading) return;

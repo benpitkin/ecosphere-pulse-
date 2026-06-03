@@ -19,6 +19,7 @@ function statusChip(s: string | null): string {
   if (/confirm/.test(n)) return "bg-emerald-50 text-emerald-700 border-emerald-200";
   if (/progress|active|scheduled|booked|accepted/.test(n)) return "bg-sky-50 text-sky-700 border-sky-200";
   if (/draft/.test(n)) return "bg-sky-50 text-sky-700 border-sky-200";
+  if (/pending|await/.test(n)) return "bg-amber-50 text-amber-700 border-amber-200";
   if (/cancel|lost|hold/.test(n)) return "bg-slate-100 text-slate-600 border-slate-200";
   return "bg-amber-50 text-amber-700 border-amber-200";
 }
@@ -87,7 +88,7 @@ export default async function InstallsPage() {
             <Card className="p-5">
               <div className="text-sm font-medium text-muted-foreground">Accepted jobs</div>
               <div className="mt-2 text-3xl font-bold">{data.jobs.length}</div>
-              <div className="mt-1 text-xs text-muted-foreground">{scheduled.length} scheduled · {tbc.length} awaiting a date</div>
+              <div className="mt-1 text-xs text-muted-foreground">{scheduled.length} scheduled · {tbc.length} pending a date</div>
             </Card>
             <Card className="p-5">
               <div className="text-sm font-medium text-muted-foreground">Total value</div>
@@ -114,8 +115,8 @@ export default async function InstallsPage() {
 
           {tbc.length > 0 ? (
             <Card className="p-5">
-              <h2 className="mb-1 text-base font-semibold">Confirmed — date to be scheduled</h2>
-              <p className="mb-3 text-xs text-muted-foreground">Accepted in Dispatch but no install date set yet. They&apos;ll move up automatically once a date is added.</p>
+              <h2 className="mb-1 text-base font-semibold">Pending bookings — awaiting an install date</h2>
+              <p className="mb-3 text-xs text-muted-foreground">Accepted with the deposit usually paid, just waiting on an install date in Dispatch. They join the schedule — and the cash forecast — automatically once a date is set.</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <Head dated={false} />
@@ -128,7 +129,7 @@ export default async function InstallsPage() {
       )}
 
       <p className="mt-6 text-xs text-muted-foreground">
-        Live from Dispatch&apos;s jobs in the shared Supabase. Values come from the linked GoHighLevel deals; undated jobs don&apos;t yet feed the cash forecast (no date to time the cash to).
+        Live from Dispatch&apos;s jobs in the shared Supabase. Values come from the linked GoHighLevel deals. Pending bookings&apos; deposits are already in your cash; the remaining balance and BUS grant join the forecast once an install date is set.
       </p>
     </div>
   );

@@ -1,11 +1,14 @@
-// assistant route — redeploy trigger to pick up ANTHROPIC_API_KEY
+// assistant route — chat over live business data, with optional persistence
 import { NextResponse } from "next/server";
 import { buildBusinessContext } from "@/lib/assistant-context";
+import { createAdminClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 type Msg = { role: "user" | "assistant"; content: string };
+
+const TABLE = "pulse_assistant_messages";
 
 const SYSTEM_PREAMBLE = `You are the EcoSphere Pulse assistant — a sharp, plain-speaking finance and operations advisor for Ben, who runs EcoSphere Energy, a heat-pump and solar installer in Devon, UK.
 
@@ -19,6 +22,35 @@ Rules:
 
 === LIVE BUSINESS DATA ===
 `;
+
+/** Persist messages. No-ops silently if the table doesn't exist yet. */
+async function save(rows: Msg[]) {
+  try {
+    const admin = createAdminClient();
+    await admin.from(TABLE).insert(rows.map((r) => ({ role: r.role, content: r.content })));
+  } catch {
+    /* table not created yet — persistence is optional */
+  }
+}
+
+/** GET: return saved chat history (most recent 60), oldest first. */
+export async function GET() {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from(TABLE)
+      .select("role, content, created_at")
+      .order("created_at", { ascending: false })
+      .limit(60);
+    if (error) return NextResponse.json({ messages: [] });
+    const messages = (data ?? [])
+      .reverse()
+      .map((r: { role: string; content: string }) => ({ role: r.role, content: r.content }));
+    return NextResponse.json({ messages });
+  } catch {
+    return NextResponse.json({ messages: [] });
+  }
+}
 
 export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -71,9 +103,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ reply: `Assistant error: ${msg}`, configured: true }, { status: 200 });
     }
     const reply =
-      Array.isArray(data?.content) && data.content[0]?.text
-        ? data.content[0].text
-        : "(No reply produced.)";
+      Array.isArray(data?.content) && data.content[0]?.text ? data.content[0].text : "(No reply produced.)";
+
+    // Persist the new exchange (last user message + this reply).
+    const lastUser = cleaned[cleaned.length - 1];
+    if (lastUser?.role === "user") await save([lastUser, { role: "assistant", content: reply }]);
+
     return NextResponse.json({ reply, configured: true });
   } catch (e) {
     return NextResponse.json(

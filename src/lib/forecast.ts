@@ -19,6 +19,7 @@ export interface ForecastOpts {
   marketingScale?: number;
   clearCot?: boolean;   // apply the model's CoT clearance plan (£20k Aug, £15k Nov)
   hire?: boolean;       // hire an installer from Sep-26 (+£2.6k/mo, +1 install/wk)
+  committed?: CommittedJob[]; // override the committed-job list (e.g. live Dispatch installs)
 }
 
 export interface ForecastMonth {
@@ -58,8 +59,8 @@ const SEASONAL = [0.8, 0.9, 1.05, 1.15, 1.0, 1.1, 1.2, 1.3, 1.4, 1.3, 1.1, 0.7];
 const WON_PCT = 0.22;
 
 // Committed jobs: advance+balance (75%) land in cash month; BUS in grant month.
-type Job = { value: number; bus: number; cashY: number; cashM: number; busY: number | null; busM: number | null };
-const COMMITTED: Job[] = [
+export type CommittedJob = { value: number; bus: number; cashY: number; cashM: number; busY: number | null; busM: number | null };
+const DEFAULT_COMMITTED: CommittedJob[] = [
   { value: 11866, bus: 9000, cashY: 2026, cashM: 6, busY: 2026, busM: 8 }, // Jul / Sep
   { value: 15152, bus: 9000, cashY: 2026, cashM: 6, busY: 2026, busM: 8 },
   { value: 18393, bus: 7500, cashY: 2026, cashM: 5, busY: 2026, busM: 7 }, // Jun / Aug
@@ -82,6 +83,7 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     return { mo: d.getMonth(), year: d.getFullYear(), label: `${MONTH_NAMES[d.getMonth()]}-${String(d.getFullYear()).slice(2)}` };
   });
 
+  const committed = opts.committed ?? DEFAULT_COMMITTED;
   const mktScale = opts.marketingScale ?? 1;
   const mkt = (mo: number) => MARKETING[mo] * mktScale;
 
@@ -104,7 +106,7 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     // INFLOWS
     let committedCash = 0;
     let committedBus = 0;
-    for (const j of COMMITTED) {
+    for (const j of committed) {
       if (j.cashY === year && j.cashM === mo) committedCash += j.value * 0.75;
       if (j.busY === year && j.busM === mo) committedBus += j.bus;
     }
@@ -195,4 +197,32 @@ export function forecastInputs(args: {
     ownerDrawings: args.ownerDrawings ?? FORECAST_DEFAULTS.ownerDrawings,
     capitalOnTapOpening: args.capitalOnTap ?? FORECAST_DEFAULTS.capitalOnTap,
   };
+}
+
+// Convert live Dispatch scheduled installs into the forecast's committed-job
+// shape: customer cash (75%) lands in the install month; a BUS grant follows
+// ~2 months later for heat-pump jobs.
+export function toCommittedJobs(
+  jobs: { value: number | null; install_date: string | null; job_type: string | null }[],
+): CommittedJob[] {
+  const out: CommittedJob[] = [];
+  for (const j of jobs) {
+    if (!j.install_date || !j.value || j.value <= 0) continue;
+    const d = new Date(j.install_date + "T00:00:00");
+    if (isNaN(d.getTime())) continue;
+    const cashY = d.getFullYear();
+    const cashM = d.getMonth();
+    const isSolarOnly = /solar|pv|battery/i.test(j.job_type || "") && !/ashp|heat/i.test(j.job_type || "");
+    const bus = isSolarOnly ? 0 : 7500; // confirmed BUS grant for heat-pump jobs
+    const bd = new Date(cashY, cashM + 2, 1); // ~8-week grant lag
+    out.push({
+      value: j.value,
+      bus,
+      cashY,
+      cashM,
+      busY: bus > 0 ? bd.getFullYear() : null,
+      busM: bus > 0 ? bd.getMonth() : null,
+    });
+  }
+  return out;
 }

@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Pulse } from "@/lib/pulse";
-import { buildForecast, forecastInputs } from "@/lib/forecast";
+import { buildForecast, forecastInputs, type CommittedJob } from "@/lib/forecast";
 
 export type AdvicePriority = "critical" | "high" | "medium" | "low";
 
@@ -32,7 +32,7 @@ function gbp(n: number | null | undefined): string {
   return "£" + Math.round(n).toLocaleString("en-GB");
 }
 
-export function buildAdvice(pulse: Pulse): AdviceItem[] {
+export function buildAdvice(pulse: Pulse, committed?: CommittedJob[]): AdviceItem[] {
   const out: AdviceItem[] = [];
   const m = pulse.metrics;
   const p = pulse.pipeline;
@@ -43,10 +43,10 @@ export function buildAdvice(pulse: Pulse): AdviceItem[] {
     receivables: m.receivables,
     overdue: m.overdue,
   };
-  const f2k = buildForecast(forecastInputs({ ...baseInputs, ownerDrawings: 2000 }));
-  const f2kCons = buildForecast(forecastInputs({ ...baseInputs, ownerDrawings: 2000 }), { conservative: true });
-  const f4k = buildForecast(forecastInputs({ ...baseInputs, ownerDrawings: 4000 }));
-  const f4kCons = buildForecast(forecastInputs({ ...baseInputs, ownerDrawings: 4000 }), { conservative: true });
+  const f2k = buildForecast(forecastInputs({ ...baseInputs, ownerDrawings: 2000 }), { committed });
+  const f2kCons = buildForecast(forecastInputs({ ...baseInputs, ownerDrawings: 2000 }), { conservative: true, committed });
+  const f4k = buildForecast(forecastInputs({ ...baseInputs, ownerDrawings: 4000 }), { committed });
+  const f4kCons = buildForecast(forecastInputs({ ...baseInputs, ownerDrawings: 4000 }), { conservative: true, committed });
 
   // 1) Overdue receivables — fastest cash, no new sales needed.
   if (m.overdue && m.overdue > 0) {

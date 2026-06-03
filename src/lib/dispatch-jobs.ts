@@ -9,6 +9,7 @@
 
 import { createAdminClient } from "@/lib/supabase";
 import { fetchOpportunityValueMap } from "@/lib/ghl-pipeline";
+import { toCommittedJobs, type CommittedJob } from "@/lib/forecast";
 
 export interface ScheduledJob {
   id: string;
@@ -101,4 +102,13 @@ export async function fetchScheduledInstalls(): Promise<ScheduledInstalls> {
   const next_date = jobs.length ? jobs[0].install_date : null;
 
   return { configured: true, jobs, total_value, next_date };
+}
+
+/** Scheduled installs converted into the forecast's committed-job shape, so the
+ *  cashflow forecast tracks what's actually booked in Dispatch. */
+export async function getCommittedJobs(): Promise<CommittedJob[]> {
+  const { jobs } = await fetchScheduledInstalls();
+  return toCommittedJobs(
+    jobs.map((j) => ({ value: j.value, install_date: j.install_date, job_type: j.job_type })),
+  );
 }

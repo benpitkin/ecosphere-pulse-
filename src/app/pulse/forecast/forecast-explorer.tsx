@@ -253,6 +253,18 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
         </div>
       </Card>
 
+      <details className="mt-6 rounded-lg border border-border bg-white px-4 py-3 text-sm">
+        <summary className="cursor-pointer font-medium text-foreground">What this forecast assumes</summary>
+        <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+          <li>· <span className="font-medium text-foreground">Average job value</span> £15,492 · <span className="font-medium text-foreground">install capacity</span> ~13/mo (3/week), +1/week if you add the installer</li>
+          <li>· <span className="font-medium text-foreground">Funnel</span> ~£50/lead, 22% proposal-to-won · <span className="font-medium text-foreground">COGS</span> 65% of revenue (44% materials + 21% subbie labour)</li>
+          <li>· <span className="font-medium text-foreground">BUS grant</span> £9,000 on ~90% of jobs, landing ~2 months after install</li>
+          <li>· <span className="font-medium text-foreground">Capital on Tap</span> £51,644 opening, repaid at 10%/mo (faster with the clearance toggle)</li>
+          <li>· <span className="font-medium text-foreground">Committed jobs</span> 9 signed jobs are baked into Jun–Oct · <span className="font-medium text-foreground">one-offs</span> MCS £2,305 now, corporation tax £13k in Nov, accountant £1,200 in Feb</li>
+          <li>· <span className="font-medium text-foreground">Your levers</span> opening cash live from Xero; take-home, marketing, CoT clearance and the hire are the toggles above</li>
+        </ul>
+      </details>
+
       <p className="mt-4 text-xs text-muted-foreground">
         Ported from EcoSphere_Cashflow_Model.xlsx. Base = your model assumptions; Conservative ≈ 35% fewer wins. Receivables live from Xero. Forecast, not a guarantee.
       </p>

@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { gbp } from "@/lib/utils";
 import { buildPulse } from "@/lib/pulse";
 import { buildForecast, forecastInputs } from "@/lib/forecast";
+import { getCommittedJobs } from "@/lib/dispatch-jobs";
 import { buildInsights, type InsightTone } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ function Tile({ label, value, sub, icon, tone = "default" }: {
 
 export default async function PulsePage() {
   const pulse = await buildPulse();
+  const committed = await getCommittedJobs();
   const m = pulse.metrics;
   const xeroLive = pulse.xero.configured;
   const forecast = buildForecast(
@@ -49,6 +51,7 @@ export default async function PulsePage() {
       receivables: m.receivables,
       overdue: m.overdue,
     }),
+    { committed },
   );
   const insights = buildInsights(pulse, forecast);
 

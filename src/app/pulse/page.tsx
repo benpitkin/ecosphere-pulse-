@@ -130,9 +130,9 @@ export default async function PulsePage() {
           icon={<TrendingUp size={18} />} tone="good" />
         <Tile label="Net equity" value={gbp(m.net_equity)}
           sub="total assets − total liabilities" icon={<CircleDot size={18} />} />
-        <Tile label="Booked installs"
+        <Tile label="Accepted jobs"
           value={installs.jobs.length ? gbp(installs.total_value) : "—"}
-          sub={installs.jobs.length ? `${installs.jobs.length} scheduled · next ${nextInstall}` : "none scheduled in Dispatch"}
+          sub={installs.jobs.length ? `${installs.jobs.length} accepted · next ${nextInstall ?? "TBC"}` : "none in Dispatch yet"}
           icon={<CalendarClock size={18} />} tone={installs.jobs.length ? "good" : "default"} />
       </div>
 

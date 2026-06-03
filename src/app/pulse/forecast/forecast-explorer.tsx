@@ -10,6 +10,7 @@ interface Props {
   receivables: number | null;
   overdue: number | null;
   openingOverride: number | null;
+  initialDraw?: number | null;
   committed?: CommittedJob[];
 }
 
@@ -21,8 +22,8 @@ const MKT_PRESETS = [
   { label: "Aggressive", scale: 2 },
 ];
 
-export default function ForecastExplorer({ cash, receivables, overdue, openingOverride, committed }: Props) {
-  const [drawings, setDrawings] = useState(2000);
+export default function ForecastExplorer({ cash, receivables, overdue, openingOverride, initialDraw, committed }: Props) {
+  const [drawings, setDrawings] = useState(initialDraw && initialDraw >= 2000 ? initialDraw : 2000);
   const [mktScale, setMktScale] = useState(1);
   const [clearCot, setClearCot] = useState(false);
   const [hire, setHire] = useState(false);

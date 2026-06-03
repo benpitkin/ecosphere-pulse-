@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { buildPulse } from "@/lib/pulse";
 import { buildAdvice, type AdvicePriority } from "@/lib/advice";
+import { getCommittedJobs } from "@/lib/dispatch-jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,8 @@ const PRIORITY: Record<AdvicePriority, { label: string; chip: string; bar: strin
 
 export default async function AdvicePage() {
   const pulse = await buildPulse();
-  const advice = buildAdvice(pulse);
+  const committed = await getCommittedJobs();
+  const advice = buildAdvice(pulse, committed);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-8">

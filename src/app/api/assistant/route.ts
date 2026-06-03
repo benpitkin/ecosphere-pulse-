@@ -1,3 +1,4 @@
+// assistant route — redeploy trigger to pick up ANTHROPIC_API_KEY
 import { NextResponse } from "next/server";
 import { buildBusinessContext } from "@/lib/assistant-context";
 

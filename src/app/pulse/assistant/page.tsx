@@ -89,11 +89,21 @@ export default function AssistantPage() {
 
   return (
     <div className="mx-auto flex h-[calc(100vh-57px)] max-w-3xl flex-col px-4 py-6 sm:px-8">
-      <div className="mb-3">
-        <h1 className="text-2xl font-bold tracking-tight">Assistant</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Talk through the business — cash, runway, the forecast, jobs and pipeline. It reads your live numbers.
-        </p>
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Assistant</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Talk through the business — cash, runway, the forecast, jobs and pipeline. It reads your live numbers.
+          </p>
+        </div>
+        {messages.length > 0 ? (
+          <button
+            onClick={() => setMessages([])}
+            className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-accent hover:text-accent"
+          >
+            New chat
+          </button>
+        ) : null}
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-border bg-white/60 p-4">

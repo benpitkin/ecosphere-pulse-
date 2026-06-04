@@ -69,6 +69,10 @@ function JobTable({ jobs, today }: { jobs: ScheduledJob[]; today: string }) {
 export default async function InstallsPage() {
   const data = await fetchScheduledInstalls();
   const today = new Date().toISOString().slice(0, 10);
+  const heatPumpJobs = data.jobs.filter((j) => /ashp|heat/i.test(j.job_type || ""));
+  const busExpected = heatPumpJobs.length * 7500;
+  const balanceDue = Math.round(data.total_value * 0.75);
+  const depositsIn = Math.round(data.total_value * 0.25);
 
   const byDate = (a: ScheduledJob, b: ScheduledJob) => (a.install_date ?? "9") < (b.install_date ?? "9") ? -1 : 1;
   const confirmed = data.jobs.filter((j) => /confirm/i.test(j.status || "")).sort(byDate);
@@ -103,6 +107,17 @@ export default async function InstallsPage() {
               <div className="mt-2 text-3xl font-bold">{fmtDate(data.next_date)}</div>
             </Card>
           </div>
+
+          <Card className="mb-6 p-5">
+            <div className="text-sm font-medium text-muted-foreground">Cash still to come from these jobs</div>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-1">
+              <span className="text-2xl font-bold text-accent">{gbp(balanceDue)}</span>
+              <span className="text-sm text-muted-foreground">balance, lands on each install date</span>
+              <span className="text-2xl font-bold text-emerald-600">{gbp(busExpected)}</span>
+              <span className="text-sm text-muted-foreground">BUS grants ({heatPumpJobs.length} heat-pump jobs, ~8 weeks after install)</span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">Deposits (~{gbp(depositsIn)}, 25%) are already in your cash. Figures are estimates from the 25/75 split.</div>
+          </Card>
 
           {confirmed.length > 0 ? (
             <Card className="mb-6 p-5">

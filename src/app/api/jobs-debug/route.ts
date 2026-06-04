@@ -1,21 +1,29 @@
-// TEMPORARY diagnostic. Remove after use.
+// TEMPORARY diagnostic — locate the subcontractor/booking-date table. Remove after use.
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
+
+const CANDIDATES = [
+  "job_subcontractors", "job_assignments", "subcontractor_assignments", "subcontractors",
+  "assignments", "bookings", "job_bookings", "crew_assignments", "job_crew", "crews",
+  "installers", "job_installers", "subcontractor_bookings", "job_subcontractor_bookings",
+  "job_dates", "scheduled_visits", "visits", "appointments", "job_appointments",
+];
+
 export async function GET() {
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin.from("jobs").select("*");
-    if (error) return NextResponse.json({ error: error.message });
-    const rows = (data ?? []) as Record<string, unknown>[];
-    const columns = rows.length ? Object.keys(rows[0]) : [];
-    // Full records for the confirmed jobs, but drop always-null columns to keep it readable.
-    const confirmed = rows.filter((r) => r.status === "confirmed").map((r) => {
-      const o: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(r)) if (v !== null && v !== "" && v !== false) o[k] = v;
-      return o;
-    });
-    return NextResponse.json({ columns, confirmed });
+    const found: Record<string, { columns: string[]; count: number }> = {};
+    for (const t of CANDIDATES) {
+      const { data, error } = await admin.from(t).select("*").limit(2);
+      if (!error) found[t] = { columns: data && data[0] ? Object.keys(data[0]) : [], count: (data ?? []).length };
+    }
+    // Confirmed jobs' appointment ids (another possible date source)
+    const { data: jobs } = await admin
+      .from("jobs")
+      .select("client_name, status, intended_start_date, ghl_appointment_ids")
+      .eq("status", "confirmed");
+    return NextResponse.json({ foundTables: found, confirmedJobs: jobs });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) });
   }

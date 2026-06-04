@@ -39,18 +39,25 @@ export async function buildBusinessContext(): Promise<string> {
 
   lines.push("\nPIPELINE (live from GoHighLevel):");
   lines.push(`- ${p.open_count} active opportunities, ${gbp(p.open_value)} raw / ${gbp(p.weighted_value)} weighted.`);
-  const proposal = p.stages.find((s) => /proposal|quote sent/i.test(s.stage_name));
-  if (proposal) lines.push(`- Proposal Sent stage: ${proposal.count} deals worth ${gbp(proposal.value)} (~22% close = ${gbp(proposal.value * 0.22)} likely).`);
-
-  lines.push("\nSCHEDULED INSTALLS (live from Dispatch):");
-  lines.push(`- ${installs.jobs.length} jobs booked, ${gbp(installs.total_value)} total, next on ${installs.next_date ?? "n/a"}.`);
-  for (const j of installs.jobs.slice(0, 12)) {
-    lines.push(`  • ${j.install_date} — ${j.client_name ?? "?"} (${j.postcode ?? "?"}) — ${j.job_type ?? "?"} — ${gbp(j.value)}`);
+  const activeStages = p.stages.filter((s) => s.weight > 0 && s.count > 0).sort((a, b) => b.value - a.value);
+  if (activeStages.length) {
+    lines.push("- Active stages: " + activeStages.map((s) => `${s.stage_name.replace(/[^\x20-\x7E]/g, "").trim()} — ${s.count} deals, ${gbp(s.value)} (weight ${Math.round(s.weight * 100)}%)`).join("; ") + ".");
   }
+  const proposal = p.stages.find((s) => /proposal|quote sent/i.test(s.stage_name));
+  if (proposal) lines.push(`- Biggest lever: Proposal Sent has ${proposal.count} deals worth ${gbp(proposal.value)} (~22% close = ${gbp(proposal.value * 0.22)} likely revenue).`);
+
+  lines.push("\nBOOKINGS & INSTALLS (live from Dispatch):");
+  const confirmedJobs = installs.jobs.filter((j) => /confirm/i.test(j.status || ""));
+  const unassignedJobs = installs.jobs.filter((j) => /draft/i.test(j.status || ""));
+  lines.push(`- ${installs.jobs.length} accepted jobs worth ${gbp(installs.total_value)} total; next install ${installs.next_date ?? "n/a"}.`);
+  lines.push(`- ${confirmedJobs.length} CONFIRMED (subcontractor assigned, date agreed): ${confirmedJobs.map((j) => `${j.client_name} ${j.install_date} ${gbp(j.value)}`).join("; ") || "none"}.`);
+  lines.push(`- ${unassignedJobs.length} UNASSIGNED bookings (date held for the customer, awaiting a subcontractor): ${unassignedJobs.map((j) => `${j.client_name} ${j.install_date} ${gbp(j.value)}`).join("; ") || "none"}.`);
+  lines.push("- Note: deposits on these are already in the cash figure; the balance and BUS grant land on each install date.");
 
   lines.push("\n12-MONTH CASH FORECAST (ported from Ben's model, driven by the booked jobs above):");
   lines.push(`- At current £2k/mo take-home: closing ${gbp(base2k.summary.closing)}, lowest ${gbp(base2k.summary.minCash)} in ${base2k.summary.minCashMonth} (cautious case lowest ${gbp(cons2k.summary.minCash)}).`);
   lines.push(`- At £4k/mo take-home: closing ${gbp(base4k.summary.closing)}, lowest ${gbp(base4k.summary.minCash)} (cautious lowest ${gbp(cons4k.summary.minCash)}).`);
+  lines.push("- Month-by-month closing cash (base case, current £2k draw): " + base2k.months.map((mo) => `${mo.label} ${gbp(mo.closing)}`).join(", ") + ".");
   lines.push("- Forecast levers Ben can toggle on the Forecast page: take-home draw (£2k–£6k), marketing spend, clear Capital on Tap (£20k Aug + £15k Nov → debt-free ~Nov-26), hire an installer from Sep-26 (+£2.6k/mo, only pays off above ~13 installs/mo).");
 
   lines.push("\nDEBT: Capital on Tap balance ~£51,644 at ~44.8% APR (the most expensive money in the business). Refinancing saves ~£15–18k over 24 months.");

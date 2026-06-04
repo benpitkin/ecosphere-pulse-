@@ -85,6 +85,23 @@ export async function fetchScheduledInstalls(): Promise<ScheduledInstalls> {
   const TERMINAL = /cancel|lost|dead|complete|done|archiv|reject/i;
   const rows = ((data ?? []) as JobRow[]).filter((r) => !TERMINAL.test(r.status || ""));
 
+  // Confirmed jobs hold their install date in an accepted job_offer (chosen_date),
+  // not on the job row. Pull those so confirmed jobs show their real date and feed
+  // the forecast. chosen_date (the agreed date) wins over a proposed date.
+  const offerMap = new Map<string, string>();
+  try {
+    const { data: offers } = await admin
+      .from("job_offers")
+      .select("job_id, chosen_date, proposed_dates, withdrawn_at")
+      .is("withdrawn_at", null);
+    for (const o of (offers ?? []) as Array<{ job_id: string; chosen_date: string | null; proposed_dates: string[] | null }>) {
+      if (o.job_id && o.chosen_date) offerMap.set(o.job_id, o.chosen_date);
+      else if (o.job_id && !offerMap.has(o.job_id) && o.proposed_dates && o.proposed_dates[0]) offerMap.set(o.job_id, o.proposed_dates[0]);
+    }
+  } catch {
+    /* job_offers optional */
+  }
+
   // The customer deal value lives in GHL (Dispatch's day_rate is operational),
   // so prefer the linked GHL opportunity value, falling back to Dispatch pricing.
   const valueMap = await fetchOpportunityValueMap();
@@ -95,7 +112,7 @@ export async function fetchScheduledInstalls(): Promise<ScheduledInstalls> {
     job_type: r.job_type,
     status: r.status,
     bus_status: r.bus_status,
-    install_date: r.intended_start_date,
+    install_date: r.intended_start_date ?? offerMap.get(r.id) ?? null,
     start_time: r.start_time,
     value: (r.ghl_opportunity_id ? valueMap.get(r.ghl_opportunity_id) ?? null : null) ?? jobValue(r),
     ghl_opportunity_id: r.ghl_opportunity_id,

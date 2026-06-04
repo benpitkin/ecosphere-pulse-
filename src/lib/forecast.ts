@@ -212,8 +212,8 @@ export function toCommittedJobs(
     if (isNaN(d.getTime())) continue;
     const cashY = d.getFullYear();
     const cashM = d.getMonth();
-    const isSolarOnly = /solar|pv|battery/i.test(j.job_type || "") && !/ashp|heat/i.test(j.job_type || "");
-    const bus = isSolarOnly ? 0 : 7500; // confirmed BUS grant for heat-pump jobs
+    const isHeatPump = /ashp|heat|hp\b/i.test(j.job_type || "");
+    const bus = isHeatPump ? 7500 : 0; // BUS grant only on heat-pump jobs
     const bd = new Date(cashY, cashM + 2, 1); // ~8-week grant lag
     out.push({
       value: j.value,

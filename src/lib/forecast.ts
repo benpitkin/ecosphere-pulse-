@@ -17,7 +17,6 @@ export interface ForecastAssumptions {
 export interface ForecastOpts {
   conservative?: boolean;
   marketingScale?: number;
-  clearCot?: boolean;   // apply the model's CoT clearance plan (£20k Aug, £15k Nov)
   hire?: boolean;       // hire an installer from Sep-26 (+£2.6k/mo, +1 install/wk)
   committed?: CommittedJob[]; // override the committed-job list (e.g. live Dispatch installs)
 }
@@ -35,7 +34,6 @@ export interface Forecast {
   summary: { minCash: number; minCashMonth: string; closing: number; netGeneration: number };
   installs: number[];
   revenue: number[];
-  cotCleared: string | null;   // month label CoT hits zero, if it does in the window
 }
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -51,6 +49,9 @@ const HP_SHARE = 0.9;
 const DNO_MCS = 65;
 const HIRE_COST = 2600;      // net + employer uplift, model Scenario 1
 const HIRE_CAPACITY = 4.33;  // +1 install/week
+// Funding Circle loan that refinanced the Capital on Tap card (Jun-2026):
+// £2,761.78/mo, 24 payments from 04-Jul-2026 to 04-Jun-2028.
+const FC_LOAN_PAYMENT = 2761.78;
 
 // Drivers indexed by calendar month (0=Jan … 11=Dec), from the Lead Funnel tab.
 const MARKETING = [5000, 5000, 5000, 5000, 1936, 1936, 3000, 3000, 4000, 4000, 4000, 4000];
@@ -99,8 +100,6 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
 
   const months: ForecastMonth[] = [];
   let cash = a.openingCash;
-  let cot = a.capitalOnTapOpening;
-  let cotCleared: string | null = null;
 
   horizon.forEach(({ mo, year, label }, i) => {
     // INFLOWS
@@ -128,17 +127,10 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     const installedRevenue = revenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
     const variable = installedRevenue * COGS_PCT + installs[i] * DNO_MCS + inflows * BANK_FEE_PCT;
 
-    // Capital on Tap: 10% minimum DD (matches deployed model), plus optional
-    // clearance lump-sums that pay down principal faster.
-    const cotDD = Math.max(cot * 0.1, 0);
-    let lump = 0;
-    if (opts.clearCot) {
-      if (year === 2026 && mo === 7) lump = Math.min(20000, Math.max(cot - cotDD, 0));   // Aug-26
-      if (year === 2026 && mo === 10) lump = Math.min(15000, Math.max(cot - cotDD, 0));  // Nov-26
-    }
-    cot = Math.max(cot - cotDD - lump, 0);
-    if (cot <= 0.5 && !cotCleared) cotCleared = label;
-    const finance = cotDD + lump + (i < 11 ? 271 : 0) + 139;
+    // Finance: Funding Circle loan (refinanced Capital on Tap) £2,761.78/mo from
+    // Jul-2026 to Jun-2028, plus GC Finance (£271, ends Mar-27) and Amex (£139).
+    const fcLoanOn = (year === 2026 && mo >= 6) || year === 2027 || (year === 2028 && mo <= 5);
+    const finance = (fcLoanOn ? FC_LOAN_PAYMENT : 0) + (i < 11 ? 271 : 0) + 139;
 
     let oneOffs = 0;
     if (i === 0) oneOffs += 2305; // MCS renewal
@@ -165,7 +157,6 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     },
     installs: installs.map((x) => Math.round(x * 10) / 10),
     revenue: revenue.map((x) => Math.round(x)),
-    cotCleared,
   };
 }
 

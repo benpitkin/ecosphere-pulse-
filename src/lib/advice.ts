@@ -61,14 +61,14 @@ export function buildAdvice(pulse: Pulse, committed?: CommittedJob[]): AdviceIte
     });
   }
 
-  // 2) Capital on Tap — toxic-rate debt, the biggest structural saving.
+  // 2) Capital on Tap — refinanced (Jun-2026) onto a Funding Circle loan.
   out.push({
-    priority: "critical",
+    priority: "low",
     category: "Debt",
-    title: `Refinance the ${gbp(COT_DEBT)} Capital on Tap balance`,
-    why: `It sits at roughly ${COT_APR}% APR — the most expensive money in the business. Your model shows even a 20% APR loan beats it.`,
-    action: "Get refinance quotes from Funding Circle, iwoca and your own bank, then move the balance onto the cheapest. Pair it with the lump-sum clearance plan (≈£20k Aug, £15k Nov) to clear it by Feb-27.",
-    impact: `${COT_SAVING} of interest saved`,
+    title: "Capital on Tap refinanced — keep the new loan on track",
+    why: `The ~£52k Capital on Tap balance (was ~${COT_APR}% APR) was refinanced onto a Funding Circle loan: £2,761.78/mo for 24 months to Jun-2028. That saves roughly ${COT_SAVING} of interest versus the old card.`,
+    action: "Make sure the old Capital on Tap direct debit is cancelled so it doesn't keep pulling money, and keep the £2,761.78/mo Funding Circle payment funded.",
+    impact: `~£17k interest saved`,
   });
 
   // 3) Owner pay — can the business afford the £4k draw Ben wants?
@@ -87,7 +87,7 @@ export function buildAdvice(pulse: Pulse, committed?: CommittedJob[]): AdviceIte
         `At £4k/mo the cautious case bottoms out at ${gbp(f4kCons.summary.minCash)} (vs ${gbp(f2kCons.summary.minCash)} at your current £2k), both in ${f4kCons.summary.minCashMonth}. ` +
         `Year-end cash: ${gbp(f4k.summary.closing)} at £4k vs ${gbp(f2k.summary.closing)} at £2k.`,
       action: affordable
-        ? "You can step up now, but ideally after the Capital on Tap balance is cleared so the extra draw isn't competing with debt paydown."
+        ? "You can step up now that the toxic Capital on Tap debt is refinanced onto a cheaper fixed loan — though stepping up gradually keeps a safety margin."
         : tight
           ? "Lift it in stages — £3k now, £4k once the Aug/Sep grant cash lands and CoT is on a cheaper rate."
           : "Keep drawing £2k until conversion and cash strengthen; revisit after Q3.",

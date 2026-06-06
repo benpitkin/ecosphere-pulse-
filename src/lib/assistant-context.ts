@@ -58,9 +58,9 @@ export async function buildBusinessContext(): Promise<string> {
   lines.push(`- At current £2k/mo take-home: closing ${gbp(base2k.summary.closing)}, lowest ${gbp(base2k.summary.minCash)} in ${base2k.summary.minCashMonth} (cautious case lowest ${gbp(cons2k.summary.minCash)}).`);
   lines.push(`- At £4k/mo take-home: closing ${gbp(base4k.summary.closing)}, lowest ${gbp(base4k.summary.minCash)} (cautious lowest ${gbp(cons4k.summary.minCash)}).`);
   lines.push("- Month-by-month closing cash (base case, current £2k draw): " + base2k.months.map((mo) => `${mo.label} ${gbp(mo.closing)}`).join(", ") + ".");
-  lines.push("- Forecast levers Ben can toggle on the Forecast page: take-home draw (£2k–£6k), marketing spend, clear Capital on Tap (£20k Aug + £15k Nov → debt-free ~Nov-26), hire an installer from Sep-26 (+£2.6k/mo, only pays off above ~13 installs/mo).");
+  lines.push("- Forecast levers Ben can toggle on the Forecast page: take-home draw (£2k–£6k), marketing spend, and hire an installer from Sep-26 (+£2.6k/mo, only pays off above ~13 installs/mo).");
 
-  lines.push("\nDEBT: Capital on Tap balance ~£51,644 at ~44.8% APR (the most expensive money in the business). Refinancing saves ~£15–18k over 24 months.");
+  lines.push("\nDEBT: The Capital on Tap card (~£52k at ~44.8% APR) was REFINANCED in June 2026 onto a Funding Circle loan — £2,761.78/mo for 24 months (04-Jul-2026 to 04-Jun-2028), saving ~£17k of interest. Also small finance: GC Finance £271/mo (ends Mar-27) and Amex £139/mo.");
 
   lines.push("\nCURRENT PRIORITISED ADVICE:");
   for (const a of advice) lines.push(`- [${a.priority}] ${a.title} — ${a.action}`);

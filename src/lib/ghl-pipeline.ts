@@ -255,7 +255,9 @@ export async function getProposals(): Promise<{ proposals: ProposalOpp[]; error?
       }
       if (opps.length < 100) break;
     }
-    out.sort((a, b) => (b.ageDays ?? 0) - (a.ageDays ?? 0));
+    // Chase score: value weighted by staleness, so big aging deals top and £0 ones sink.
+    const chaseScore = (p: ProposalOpp) => (p.value || 0) * (1 + Math.min(p.ageDays ?? 0, 90) / 30);
+    out.sort((a, b) => chaseScore(b) - chaseScore(a));
     return { proposals: out };
   } catch (e) {
     return { proposals: [], error: e instanceof Error ? e.message : String(e) };

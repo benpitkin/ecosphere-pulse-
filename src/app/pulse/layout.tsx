@@ -8,7 +8,7 @@ export default function PulseLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-[hsl(210_40%_98%)]">
       <header className="sticky top-0 z-20 border-b border-border bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-8">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <Link href="/pulse" className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white">
               <Activity size={18} />
@@ -17,11 +17,12 @@ export default function PulseLayout({ children }: { children: React.ReactNode })
               EcoSphere <span className="text-accent">Pulse</span>
             </span>
           </Link>
-          <nav className="flex items-center gap-1 text-sm">
+          <nav className="-mx-4 flex items-center gap-1 overflow-x-auto whitespace-nowrap px-4 text-sm [&>*]:shrink-0 sm:mx-0 sm:px-0">
             <NavLink href="/pulse" label="Cockpit" />
             <NavLink href="/pulse/focus" label="This week" />
             <NavLink href="/pulse/forecast" label="Forecast" />
             <NavLink href="/pulse/installs" label="Installs" />
+            <NavLink href="/pulse/crew" label="Crew" />
             <NavLink href="/pulse/liabilities" label="Owed" />
             <NavLink href="/pulse/advice" label="Advice" />
             <NavLink href="/pulse/assistant" label="Assistant" />

@@ -60,7 +60,7 @@ export async function buildBusinessContext(): Promise<string> {
   lines.push("- Month-by-month closing cash (base case, current £2k draw): " + base2k.months.map((mo) => `${mo.label} ${gbp(mo.closing)}`).join(", ") + ".");
   lines.push("- Forecast levers Ben can toggle on the Forecast page: take-home draw (£2k–£6k), marketing spend, and hire an installer from Sep-26 (+£2.6k/mo, only pays off above ~13 installs/mo).");
 
-  lines.push("\nDEBT: The Capital on Tap card (~£52k at ~44.8% APR) was REFINANCED in June 2026 onto a Funding Circle loan — £2,761.78/mo for 24 months (04-Jul-2026 to 04-Jun-2028), saving ~£17k of interest. Also small finance: GC Finance £271/mo (ends Mar-27) and Amex £139/mo.");
+  lines.push("\nDEBT: The Capital on Tap card (~£52k at ~44.8% APR) was REFINANCED in June 2026 onto a Funding Circle loan — £2,761.78/mo for 24 months (04-Jul-2026 to 04-Jun-2028), saving ~£17k of interest. NOTE: £52k was settled but the Capital on Tap card still has ~£6,307.67 left on it at ~44.8% APR — Ben should clear that from cash now. Also small finance: GC Finance £271/mo (ends Mar-27) and Amex £139/mo.");
 
   lines.push("\nCURRENT PRIORITISED ADVICE:");
   for (const a of advice) lines.push(`- [${a.priority}] ${a.title} — ${a.action}`);

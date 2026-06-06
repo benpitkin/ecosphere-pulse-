@@ -272,17 +272,17 @@ function parseXeroDate(v: string | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
-/** TEMP diagnostic: full balance-sheet line index (account name -> value). */
-export async function getBalanceSheetIndex(): Promise<Record<string, number> | { error: string }> {
+/** Full balance-sheet line index (account name -> value), for the liabilities view. */
+export async function getBalanceSheetIndex(): Promise<{ lines: Record<string, number>; error?: string }> {
   const auth = await getAuth();
-  if (!auth.ok) return { error: auth.error ?? "Xero auth failed" };
+  if (!auth.ok) return { lines: {}, error: auth.error ?? "Xero auth failed" };
   try {
     const bs = await xeroGet("/Reports/BalanceSheet", auth.accessToken, auth.tenantId);
     const reports = (bs.Reports as Array<{ Rows?: ReportRow[] }> | undefined) ?? [];
     const idx = new Map<string, number>();
     indexRows(reports[0]?.Rows, idx);
-    return Object.fromEntries(idx);
+    return { lines: Object.fromEntries(idx) };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    return { lines: {}, error: e instanceof Error ? e.message : String(e) };
   }
 }

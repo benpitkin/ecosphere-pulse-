@@ -31,10 +31,10 @@ const COT_REMNANT = 6307.67;        // left on the card at ~44.8% after the £52
 const CORP_TAX = 13000;             // accountant estimate, due Nov-26
 
 export async function getLiabilities(): Promise<Liabilities> {
-  const idx = await getBalanceSheetIndex();
-  if ("error" in idx) return { configured: false, items: [], lenderTotal: 0, hmrcTotal: 0, error: idx.error };
+  const { lines, error } = await getBalanceSheetIndex();
+  if (error) return { configured: false, items: [], lenderTotal: 0, hmrcTotal: 0, error };
 
-  const val = (k: string) => Number(idx[k] ?? 0);
+  const val = (k: string) => Number(lines[k] ?? 0);
   const owed = (k: string) => Math.abs(val(k)); // liability magnitude
   const items: LiabilityItem[] = [];
 

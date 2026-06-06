@@ -44,6 +44,7 @@ export default async function PulsePage() {
   const pulse = await buildPulse();
   const committed = await getCommittedJobs();
   const installs = await fetchScheduledInstalls();
+  const unassignedCount = installs.jobs.filter((j) => /draft/i.test(j.status || "")).length;
   const nextInstall = installs.next_date
     ? new Date(installs.next_date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
     : null;
@@ -90,6 +91,19 @@ export default async function PulsePage() {
           </Link>
         ) : null}
       </div>
+
+      {/* This week — top actions */}
+      {(m.overdue && m.overdue > 0) || unassignedCount > 0 ? (
+        <Link href="/pulse/focus" className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 hover:bg-accent/10">
+          <span className="text-sm">
+            <span className="font-semibold text-accent">This week:</span>{" "}
+            {m.overdue && m.overdue > 0 ? `chase ${gbp(m.overdue)} overdue` : ""}
+            {m.overdue && m.overdue > 0 && unassignedCount > 0 ? " · " : ""}
+            {unassignedCount > 0 ? `assign a sub to ${unassignedCount} booking${unassignedCount === 1 ? "" : "s"}` : ""}
+          </span>
+          <ArrowRight size={16} className="shrink-0 text-accent" />
+        </Link>
+      ) : null}
 
       {/* Insights / advisor */}
       <Card className="mb-6 p-5">

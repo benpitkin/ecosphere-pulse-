@@ -286,3 +286,31 @@ export async function getBalanceSheetIndex(): Promise<{ lines: Record<string, nu
     return { lines: {}, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+export interface OverdueContact { name: string; overdue: number; outstanding: number; }
+
+/** Per-contact overdue receivables, biggest first — the chase list. */
+export async function getOverdueContacts(): Promise<{ contacts: OverdueContact[]; error?: string }> {
+  const auth = await getAuth();
+  if (!auth.ok) return { contacts: [], error: auth.error ?? "Xero auth failed" };
+  const out: OverdueContact[] = [];
+  try {
+    for (let page = 1; page <= 20; page++) {
+      const body = await xeroGet(`/Contacts?page=${page}`, auth.accessToken, auth.tenantId);
+      const contacts = (body.Contacts as Array<Record<string, unknown>> | undefined) ?? [];
+      if (!contacts.length) break;
+      for (const c of contacts) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ar = (c as any)?.Balances?.AccountsReceivable;
+        const overdue = Number(ar?.Overdue) || 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (overdue > 0) out.push({ name: String((c as any).Name ?? "Unknown"), overdue, outstanding: Number(ar?.Outstanding) || 0 });
+      }
+      if (contacts.length < 100) break;
+    }
+    out.sort((a, b) => b.overdue - a.overdue);
+    return { contacts: out };
+  } catch (e) {
+    return { contacts: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}

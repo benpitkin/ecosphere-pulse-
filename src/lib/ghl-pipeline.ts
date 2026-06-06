@@ -211,3 +211,53 @@ export async function fetchOpportunityValueMap(): Promise<Map<string, number>> {
   }
   return map;
 }
+
+export interface ProposalOpp { name: string; value: number; ageDays: number | null; }
+
+/** Open opportunities in the Proposal Sent stage(s), stalest first — the follow-up list. */
+export async function getProposals(): Promise<{ proposals: ProposalOpp[]; error?: string }> {
+  const apiKey = process.env.GHL_API_KEY;
+  const locationId = process.env.GHL_LOCATION_ID;
+  const pipelineId = process.env.GHL_SALES_PIPELINE_ID || process.env.GHL_INSTALL_PIPELINE_ID;
+  if (!apiKey || !locationId || !pipelineId) return { proposals: [] };
+
+  const proposalStageIds = new Set<string>();
+  try {
+    const pipes = await ghlFetch(`/opportunities/pipelines?locationId=${locationId}`);
+    const list = (pipes.pipelines as Array<{ id: string; stages?: PipelineStage[] }>) ?? [];
+    const target = list.find((p) => p.id === pipelineId) ?? list[0];
+    for (const s of target?.stages ?? []) if (/proposal|quote sent/i.test(s.name)) proposalStageIds.add(s.id);
+  } catch (e) {
+    return { proposals: [], error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!proposalStageIds.size) return { proposals: [] };
+
+  const out: ProposalOpp[] = [];
+  try {
+    for (let page = 1; page <= 5; page++) {
+      const body = await ghlFetch(
+        `/opportunities/search?location_id=${locationId}&pipeline_id=${pipelineId}&status=open&limit=100&page=${page}`,
+      );
+      const opps = (body.opportunities as Array<Record<string, unknown>>) ?? [];
+      if (!opps.length) break;
+      for (const o of opps) {
+        const sid = (o.pipelineStageId as string) ?? (o.stageId as string) ?? "";
+        if (!proposalStageIds.has(sid)) continue;
+        const value = typeof o.monetaryValue === "number" ? (o.monetaryValue as number) : 0;
+        const name = String(o.name ?? o.contactName ?? "Unnamed deal");
+        const dateStr = (o.updatedAt as string) ?? (o.lastStatusChangeAt as string) ?? (o.createdAt as string) ?? "";
+        let ageDays: number | null = null;
+        if (dateStr) {
+          const d = new Date(dateStr);
+          if (!isNaN(d.getTime())) ageDays = Math.floor((Date.now() - d.getTime()) / 86400000);
+        }
+        out.push({ name, value, ageDays });
+      }
+      if (opps.length < 100) break;
+    }
+    out.sort((a, b) => (b.ageDays ?? 0) - (a.ageDays ?? 0));
+    return { proposals: out };
+  } catch (e) {
+    return { proposals: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}

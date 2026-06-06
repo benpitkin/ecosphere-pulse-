@@ -25,23 +25,22 @@ const MKT_PRESETS = [
 export default function ForecastExplorer({ cash, receivables, overdue, openingOverride, initialDraw, committed }: Props) {
   const [drawings, setDrawings] = useState(initialDraw && initialDraw >= 2000 ? initialDraw : 2000);
   const [mktScale, setMktScale] = useState(1);
-  const [clearCot, setClearCot] = useState(false);
   const [hire, setHire] = useState(false);
 
   // Selected scenario (base + conservative).
   const base = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { marketingScale: mktScale, clearCot, hire, committed },
+      { marketingScale: mktScale, hire, committed },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale, clearCot, hire, committed],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed],
   );
   const cons = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { conservative: true, marketingScale: mktScale, clearCot, hire, committed },
+      { conservative: true, marketingScale: mktScale, hire, committed },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale, clearCot, hire, committed],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed],
   );
 
   const liveCash = cash != null || openingOverride != null;
@@ -137,22 +136,11 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
-          <button onClick={() => setClearCot((v) => !v)}
-            className={`rounded-md border px-3 py-1.5 text-xs font-medium ${clearCot ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:border-accent"}`}>
-            {clearCot ? "\u2713 " : ""}Clear Capital on Tap (£20k Aug, £15k Nov)
-          </button>
           <button onClick={() => setHire((v) => !v)}
             className={`rounded-md border px-3 py-1.5 text-xs font-medium ${hire ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:border-accent"}`}>
             {hire ? "\u2713 " : ""}Hire an installer from Sep-26 (+£2.6k/mo)
           </button>
         </div>
-        {clearCot ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {base.cotCleared
-              ? `Capital on Tap cleared by ${base.cotCleared} — frees ~£5k/mo of repayments after that and saves ~£15\u201318k of interest (per your model). Cash dips as you pay it down.`
-              : "Lump-sums applied — see the dip and faster paydown."}
-          </p>
-        ) : null}
         {hire ? (
           <p className="mt-2 text-xs text-muted-foreground">
             Adds installer capacity from Sep-26. It only pays for itself once demand tops your current ~13 installs/mo — try it with marketing on Push or Aggressive.
@@ -261,7 +249,7 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
           <li>· <span className="font-medium text-foreground">Average job value</span> £15,492 · <span className="font-medium text-foreground">install capacity</span> ~13/mo (3/week), +1/week if you add the installer</li>
           <li>· <span className="font-medium text-foreground">Funnel</span> ~£50/lead, 22% proposal-to-won · <span className="font-medium text-foreground">COGS</span> 65% of revenue (44% materials + 21% subbie labour)</li>
           <li>· <span className="font-medium text-foreground">BUS grant</span> £9,000 on ~90% of jobs, landing ~2 months after install</li>
-          <li>· <span className="font-medium text-foreground">Capital on Tap</span> £51,644 opening, repaid at 10%/mo (faster with the clearance toggle)</li>
+          <li>· <span className="font-medium text-foreground">Debt</span> Capital on Tap refinanced onto a Funding Circle loan — £2,761.78/mo to Jun-2028</li>
           <li>· <span className="font-medium text-foreground">Committed jobs</span> 9 signed jobs are baked into Jun–Oct · <span className="font-medium text-foreground">one-offs</span> MCS £2,305 now, corporation tax £13k in Nov, accountant £1,200 in Feb</li>
           <li>· <span className="font-medium text-foreground">Your levers</span> opening cash live from Xero; take-home, marketing, CoT clearance and the hire are the toggles above</li>
         </ul>

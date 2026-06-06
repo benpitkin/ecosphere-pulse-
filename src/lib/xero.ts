@@ -275,7 +275,7 @@ function parseXeroDate(v: string | undefined): string | null {
 /** TEMP diagnostic: full balance-sheet line index (account name -> value). */
 export async function getBalanceSheetIndex(): Promise<Record<string, number> | { error: string }> {
   const auth = await getAuth();
-  if (!auth.ok) return { error: auth.error };
+  if (!auth.ok) return { error: auth.error ?? "Xero auth failed" };
   try {
     const bs = await xeroGet("/Reports/BalanceSheet", auth.accessToken, auth.tenantId);
     const reports = (bs.Reports as Array<{ Rows?: ReportRow[] }> | undefined) ?? [];

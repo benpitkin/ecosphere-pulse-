@@ -7,6 +7,8 @@
 import { buildPulse } from "@/lib/pulse";
 import { buildForecast, forecastInputs } from "@/lib/forecast";
 import { getCommittedJobs, fetchScheduledInstalls } from "@/lib/dispatch-jobs";
+import { getOverdueContacts } from "@/lib/xero";
+import { getProposals } from "@/lib/ghl-pipeline";
 import { buildAdvice } from "@/lib/advice";
 
 function gbp(n: number | null | undefined): string {
@@ -18,6 +20,8 @@ export async function buildBusinessContext(): Promise<string> {
   const pulse = await buildPulse();
   const committed = await getCommittedJobs();
   const installs = await fetchScheduledInstalls();
+  const overdue = await getOverdueContacts();
+  const proposalsRes = await getProposals();
   const m = pulse.metrics;
   const p = pulse.pipeline;
 
@@ -46,6 +50,14 @@ export async function buildBusinessContext(): Promise<string> {
   const proposal = p.stages.find((s) => /proposal|quote sent/i.test(s.stage_name));
   if (proposal) lines.push(`- Biggest lever: Proposal Sent has ${proposal.count} deals worth ${gbp(proposal.value)} (~22% close = ${gbp(proposal.value * 0.22)} likely revenue).`);
 
+  if (overdue.contacts.length) {
+    lines.push("\nOVERDUE INVOICES TO CHASE (live from Xero): " + overdue.contacts.slice(0, 8).map((c) => `${c.name} ${gbp(c.overdue)}`).join("; ") + ".");
+  }
+  if (proposalsRes.proposals.length) {
+    const ps = proposalsRes.proposals;
+    const stale = ps.filter((p) => (p.ageDays ?? 0) >= 21);
+    lines.push(`\nOPEN PROPOSALS TO FOLLOW UP (live from GoHighLevel): ${ps.length} proposals worth ${gbp(ps.reduce((a, p) => a + p.value, 0))}. Stalest/biggest: ` + ps.slice(0, 8).map((p) => `${p.name} ${gbp(p.value)}${p.ageDays != null ? ` (${p.ageDays}d)` : ""}`).join("; ") + `. ${stale.length} have had no update in 3+ weeks.`);
+  }
   lines.push("\nBOOKINGS & INSTALLS (live from Dispatch):");
   const confirmedJobs = installs.jobs.filter((j) => /confirm/i.test(j.status || ""));
   const unassignedJobs = installs.jobs.filter((j) => /draft/i.test(j.status || ""));

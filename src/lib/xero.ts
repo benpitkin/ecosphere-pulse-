@@ -271,3 +271,18 @@ function parseXeroDate(v: string | undefined): string | null {
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
+
+/** TEMP diagnostic: full balance-sheet line index (account name -> value). */
+export async function getBalanceSheetIndex(): Promise<Record<string, number> | { error: string }> {
+  const auth = await getAuth();
+  if (!auth.ok) return { error: auth.error };
+  try {
+    const bs = await xeroGet("/Reports/BalanceSheet", auth.accessToken, auth.tenantId);
+    const reports = (bs.Reports as Array<{ Rows?: ReportRow[] }> | undefined) ?? [];
+    const idx = new Map<string, number>();
+    indexRows(reports[0]?.Rows, idx);
+    return Object.fromEntries(idx);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}

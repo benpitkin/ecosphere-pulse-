@@ -19,6 +19,7 @@ export default function PulseLayout({ children }: { children: React.ReactNode })
           </Link>
           <nav className="flex items-center gap-1 text-sm">
             <NavLink href="/pulse" label="Cockpit" />
+            <NavLink href="/pulse/focus" label="This week" />
             <NavLink href="/pulse/forecast" label="Forecast" />
             <NavLink href="/pulse/installs" label="Installs" />
             <NavLink href="/pulse/liabilities" label="Owed" />

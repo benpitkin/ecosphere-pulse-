@@ -12,8 +12,10 @@ const TOKEN_URL = "https://identity.xero.com/connect/token";
 const AUTH_URL = "https://login.xero.com/identity/connect/authorize";
 const CONNECTIONS_URL = "https://api.xero.com/connections";
 const API = "https://api.xero.com/api.xro/2.0";
+// Granular scopes (required for Xero apps created on/after 2 Mar 2026 — the old broad
+// accounting.reports.read / accounting.transactions.read no longer exist for new apps).
 const SCOPES =
-  "offline_access accounting.reports.read accounting.transactions.read accounting.contacts.read";
+  "offline_access accounting.reports.balancesheet.read accounting.invoices.read accounting.contacts.read";
 
 interface ConnRow {
   tenant_id: string | null;
@@ -232,10 +234,16 @@ export async function getCashPosition(): Promise<CashPosition> {
   const { lines, error } = await getBalanceSheetIndex();
   if (error) return { cashBalance: 0, receivables: 0, overdue: 0, workingCapital: 0, netEquity: 0 };
 
+  // Cash = ledger bank total. NOTE: if a bank account is unreconciled in Xero this
+  // lags the real bank-feed balance — reconcile in Xero rather than patching here.
   const cashBalance = pick(lines, "Total Bank", "Total Cash", "Cash and Cash Equivalents");
-  const receivables = pick(lines, "Accounts Receivable", "Total Accounts Receivable", "Trade Debtors");
+  // Receivables = trade AR + CIS Asset (CIS tax owed back by HMRC), matching §8.
+  const receivables =
+    pick(lines, "Accounts Receivable", "Total Accounts Receivable", "Trade Debtors") +
+    pick(lines, "CIS Asset");
   const currentAssets = pick(lines, "Total Current Assets");
-  const currentLiabilities = pick(lines, "Total Current Liabilities");
+  // Xero reports liabilities as negative; use the magnitude so WC = assets − liabilities.
+  const currentLiabilities = Math.abs(pick(lines, "Total Current Liabilities"));
   const netEquity = pick(lines, "Total Equity", "Net Assets");
 
   const overdueContacts = await getOverdueContacts();

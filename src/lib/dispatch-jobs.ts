@@ -1,12 +1,13 @@
 import type { CommittedJob } from "./types";
-import { supabaseService } from "./supabase";
+import { supabaseServiceOptional } from "./supabase";
 
 const TERMINAL = /cancel|lost|dead|complete|done|archiv|reject/i;
 
 // Scheduled installs from Dispatch `jobs`, confirmed dates from `job_offers.chosen_date`.
 // TODO: port real query (offerMap, GHL-first value resolution). See docs/HANDOVER.md §5.
 export async function fetchScheduledInstalls(): Promise<unknown[]> {
-  const supabase = supabaseService();
+  const supabase = supabaseServiceOptional();
+  if (!supabase) return []; // no creds -> render empty, don't crash
   const { data } = await supabase.from("jobs").select("*");
   return (data ?? []).filter((j: { status?: string }) => !TERMINAL.test(j.status ?? ""));
 }

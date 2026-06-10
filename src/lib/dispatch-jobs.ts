@@ -96,8 +96,6 @@ export async function getCommittedJobs(): Promise<CommittedJob[]> {
       customer: inst.customer,
       value: inst.value,
       installMonth: monthLabel(year, month),
-      // NOTE: busGrant over-grants on heat_loss_survey (matches /heat/); the enum-accurate
-      // fix (ashp_install only) is deferred to the forecast module.
       bus: busGrant(inst.jobType),
     });
   }

@@ -31,9 +31,10 @@ export function financeLine(i: number, year: number, mo: number): number {
   return (fcLoanOn ? FC_LOAN_PAYMENT : 0) + (i < 11 ? 271 : 0) + 139;
 }
 
-// BUS grant rule: heat-pump jobs only.
+// BUS grant rule: heat-pump installs only. Match the exact Dispatch `job_type` enum value
+// so non-installs (notably "heat_loss_survey") don't wrongly qualify for the £7,500 grant.
 export function busGrant(jobType: string): number {
-  return /ashp|heat|hp\b/i.test(jobType) ? 7500 : 0;
+  return jobType === "ashp_install" ? 7500 : 0;
 }
 
 export interface ForecastParams {

@@ -18,10 +18,6 @@ export interface AdviceItem {
   impact?: string;
 }
 
-// Capital on Tap facts from EcoSphere_Cashflow_Model.xlsx (CoT Refinance tab).
-const COT_DEBT = 51644;
-const COT_APR = 44.8;
-const COT_SAVING = "£15–18k over 24 months";
 const PROPOSAL_CLOSE = 0.22;
 const CURRENT_DRAW = 2000;
 
@@ -61,15 +57,6 @@ export function buildAdvice(pulse: Pulse, committed?: CommittedJob[]): AdviceIte
     });
   }
 
-  // 2) Capital on Tap — refinanced (Jun-2026) onto a Funding Circle loan.
-  out.push({
-    priority: "high",
-    category: "Debt",
-    title: "Clear the last £6,307.67 on Capital on Tap",
-    why: `£52k of the Capital on Tap balance was refinanced onto a Funding Circle loan (£2,761.78/mo to Jun-2028, saving ~${COT_SAVING} of interest) — but ~£6,308 still sits on the card at ~${COT_APR}% APR, costing about £235/mo for nothing.`,
-    action: "Pay the £6,307.67 off from cash now (you have ~£49.7k) to take the card to zero, then cancel the old Capital on Tap direct debit so it stops pulling money.",
-    impact: "Ends the 44.8% interest for good",
-  });
 
   // 3) Owner pay — can the business afford the £4k draw Ben wants?
   {

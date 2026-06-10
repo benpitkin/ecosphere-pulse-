@@ -27,7 +27,7 @@ export interface Liabilities {
 
 // Not yet reconciled into Xero — entered from the loan paperwork.
 const FC_LOAN_BALANCE = 55588;      // origination; £2,761.78/mo to Jun-2028
-const COT_REMNANT = 6307.67;        // left on the card at ~44.8% after the £52k settlement
+const COT_REMNANT = 0;               // fully cleared Jun-2026 (£52k refinanced + remnant paid from cash)
 const CORP_TAX = 13000;             // accountant estimate, due Nov-26
 
 export async function getLiabilities(): Promise<Liabilities> {
@@ -40,7 +40,7 @@ export async function getLiabilities(): Promise<Liabilities> {
 
   // ---- lenders ----
   items.push({ label: "Funding Circle loan", amount: FC_LOAN_BALANCE, group: "lender", note: "£2,761.78/mo to Jun-2028 — refinanced Capital on Tap" });
-  items.push({ label: "Capital on Tap (remaining)", amount: COT_REMNANT, group: "lender", flag: true, note: "~44.8% APR — clear from cash" });
+  if (COT_REMNANT > 0) items.push({ label: "Capital on Tap (remaining)", amount: COT_REMNANT, group: "lender", flag: true, note: "~44.8% APR — clear from cash" });
   const amex = owed("british airways american expre");
   if (amex) items.push({ label: "Amex card", amount: amex, group: "lender" });
   const hp = owed("hire purchase - gl18nld");

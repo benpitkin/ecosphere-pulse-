@@ -186,6 +186,7 @@ interface ReportCell {
 }
 interface ReportRow {
   RowType?: string;
+  Title?: string;
   Cells?: ReportCell[];
   Rows?: ReportRow[];
 }
@@ -216,6 +217,21 @@ export async function getBalanceSheetIndex(): Promise<{
   if (!json) return { lines: {}, error: "Xero not connected" };
   const lines: Record<string, number> = {};
   flattenReport(json.Reports?.[0]?.Rows, lines);
+  return { lines };
+}
+
+// Liability lines only ({ label -> value }) — rows under balance-sheet sections whose
+// title mentions "Liabilities", so callers don't pick up positive asset/equity lines.
+export async function getLiabilityLines(): Promise<{
+  lines: Record<string, number>;
+  error?: string;
+}> {
+  const json = await xeroGet<ReportsResponse>("/Reports/BalanceSheet");
+  if (!json) return { lines: {}, error: "Xero not connected" };
+  const lines: Record<string, number> = {};
+  for (const section of json.Reports?.[0]?.Rows ?? []) {
+    if (section.Title && /liabilit/i.test(section.Title)) flattenReport(section.Rows, lines);
+  }
   return { lines };
 }
 

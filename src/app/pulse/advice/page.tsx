@@ -1,10 +1,21 @@
+import { getAdvice } from "@/lib/advice";
+
 export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function AdvicePage() {
+  const items = await getAdvice();
+
   return (
-    <section>
+    <section className="space-y-3">
       <h1 className="text-xl font-semibold">Advice</h1>
-      <p className="mt-2 text-gray-600">TODO — see docs/HANDOVER.md §5.</p>
+      <ul className="space-y-2">
+        {items.map((a) => (
+          <li key={a.title} className="rounded border p-3">
+            <div className="font-medium">{a.title}</div>
+            <div className="text-sm text-gray-600">{a.detail}</div>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

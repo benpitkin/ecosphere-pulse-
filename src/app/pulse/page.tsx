@@ -1,14 +1,21 @@
+import Link from "next/link";
 import { getCashPosition } from "@/lib/xero";
 import { getPulseConfig } from "@/lib/config";
+import { getCommittedJobs } from "@/lib/dispatch-jobs";
 
 export const dynamic = "force-dynamic";
 
 const gbp = (n: number) => `£${Math.round(n).toLocaleString()}`;
 
 export default async function CockpitPage() {
-  const [cash, config] = await Promise.all([getCashPosition(), getPulseConfig()]);
+  const [cash, config, committed] = await Promise.all([
+    getCashPosition(),
+    getPulseConfig(),
+    getCommittedJobs(),
+  ]);
   const runway = config.monthlyOverheads > 0 ? cash.cashBalance / config.monthlyOverheads : 0;
   const low = runway < config.lowRunwayMonths;
+  const bookedValue = committed.reduce((sum, j) => sum + j.value, 0);
 
   return (
     <section className="space-y-4">
@@ -18,13 +25,17 @@ export default async function CockpitPage() {
         <Stat label="Receivables" value={gbp(cash.receivables)} />
         <Stat label="Overdue" value={gbp(cash.overdue)} />
         <Stat label="Runway" value={`${runway.toFixed(1)} mo`} />
+        <Stat label="Accepted jobs" value={`${committed.length}`} />
+        <Stat label="Booked work" value={gbp(bookedValue)} />
       </div>
       {low && (
         <p className="rounded bg-red-50 p-3 text-sm text-red-700">
           ⚠ Runway below {config.lowRunwayMonths} months — watch cash.
         </p>
       )}
-      {/* TODO: accepted-jobs tile, "This week" banner — see docs/HANDOVER.md §5 */}
+      <Link href="/pulse/focus" className="block rounded border p-3 text-sm hover:bg-gray-50">
+        → This week: overdue chases &amp; proposals to follow up
+      </Link>
     </section>
   );
 }

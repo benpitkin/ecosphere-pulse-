@@ -203,8 +203,9 @@ export function toCommittedJobs(
     if (isNaN(d.getTime())) continue;
     const cashY = d.getFullYear();
     const cashM = d.getMonth();
-    const isHeatPump = /ashp|heat|hp\b/i.test(j.job_type || "");
-    const bus = isHeatPump ? 7500 : 0; // BUS grant only on heat-pump jobs
+    // BUS grant is heat-pump installs only — match the exact Dispatch job_type enum
+    // value so a heat_loss_survey (which contains "heat") doesn't wrongly qualify.
+    const bus = j.job_type === "ashp_install" ? 7500 : 0;
     const bd = new Date(cashY, cashM + 2, 1); // ~8-week grant lag
     out.push({
       value: j.value,

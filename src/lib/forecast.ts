@@ -21,12 +21,42 @@ export interface ForecastOpts {
   committed?: CommittedJob[]; // override the committed-job list (e.g. live Dispatch installs)
 }
 
+// Per-month line-item breakdown behind the inflows/outflows totals (for the waterfall view).
+export interface MonthBreakdown {
+  // money in
+  committedCash: number;
+  committedBus: number;
+  receivables: number;
+  newWinsCash: number;
+  busFromWins: number;
+  vat: number;
+  // fixed costs
+  overheads: number;
+  ownerDrawings: number;
+  marketing: number;
+  natashaUplift: number;
+  hire: number;
+  // variable costs
+  cogs: number;
+  dnoMcs: number;
+  bankFees: number;
+  // finance
+  fundingCircle: number;
+  gcFinance: number;
+  amex: number;
+  // one-offs
+  mcsRenewal: number;
+  corporationTax: number;
+  accountant: number;
+}
+
 export interface ForecastMonth {
   label: string;
   inflows: number;
   outflows: number;
   net: number;
   closing: number;
+  breakdown: MonthBreakdown;
 }
 
 export interface Forecast {
@@ -120,27 +150,66 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
 
     const inflows = committedCash + committedBus + newWinsCash + busFromWins + receivables + vat;
 
-    // OUTFLOWS
+    // OUTFLOWS — fixed
     const hireOn = opts.hire && onFromSep26(year, mo);
     const natashaUplift = i >= 2 ? 1244 : 0;
-    const fixed = a.monthlyOverheadsBase + a.ownerDrawings + mkt(mo) + natashaUplift + (hireOn ? HIRE_COST : 0);
+    const marketing = mkt(mo);
+    const hireCost = hireOn ? HIRE_COST : 0;
+    const fixed = a.monthlyOverheadsBase + a.ownerDrawings + marketing + natashaUplift + hireCost;
+
+    // OUTFLOWS — variable: COGS on installed revenue + DNO/MCS per install + card/bank fees.
     const installedRevenue = revenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
-    const variable = installedRevenue * COGS_PCT + installs[i] * DNO_MCS + inflows * BANK_FEE_PCT;
+    const cogs = installedRevenue * COGS_PCT;
+    const dnoMcs = installs[i] * DNO_MCS;
+    const bankFees = inflows * BANK_FEE_PCT;
+    const variable = cogs + dnoMcs + bankFees;
 
     // Finance: Funding Circle loan (refinanced Capital on Tap) £2,761.78/mo from
     // Jul-2026 to Jun-2028, plus GC Finance (£271, ends Mar-27) and Amex (£139).
     const fcLoanOn = (year === 2026 && mo >= 6) || year === 2027 || (year === 2028 && mo <= 5);
-    const finance = (fcLoanOn ? FC_LOAN_PAYMENT : 0) + (i < 11 ? 271 : 0) + 139;
+    const fundingCircle = fcLoanOn ? FC_LOAN_PAYMENT : 0;
+    const gcFinance = i < 11 ? 271 : 0;
+    const amex = 139;
+    const finance = fundingCircle + gcFinance + amex;
 
-    let oneOffs = 0;
-    if (i === 0) oneOffs += 2305; // MCS renewal
-    if (mo === 10) oneOffs += 13000; // corporation tax (Nov)
-    if (mo === 1) oneOffs += 1200; // accountant (Feb)
+    // One-offs
+    const mcsRenewal = i === 0 ? 2305 : 0;
+    const corporationTax = mo === 10 ? 13000 : 0; // Nov
+    const accountant = mo === 1 ? 1200 : 0; // Feb
+    const oneOffs = mcsRenewal + corporationTax + accountant;
 
     const outflows = fixed + variable + finance + oneOffs;
     const net = inflows - outflows;
     cash += net;
-    months.push({ label, inflows: r(inflows), outflows: r(outflows), net: r(net), closing: r(cash) });
+    months.push({
+      label,
+      inflows: r(inflows),
+      outflows: r(outflows),
+      net: r(net),
+      closing: r(cash),
+      breakdown: {
+        committedCash: r(committedCash),
+        committedBus: r(committedBus),
+        receivables: r(receivables),
+        newWinsCash: r(newWinsCash),
+        busFromWins: r(busFromWins),
+        vat: r(vat),
+        overheads: r(a.monthlyOverheadsBase),
+        ownerDrawings: r(a.ownerDrawings),
+        marketing: r(marketing),
+        natashaUplift: r(natashaUplift),
+        hire: r(hireCost),
+        cogs: r(cogs),
+        dnoMcs: r(dnoMcs),
+        bankFees: r(bankFees),
+        fundingCircle: r(fundingCircle),
+        gcFinance: r(gcFinance),
+        amex: r(amex),
+        mcsRenewal: r(mcsRenewal),
+        corporationTax: r(corporationTax),
+        accountant: r(accountant),
+      },
+    });
   });
 
   const closings = months.map((m) => m.closing);

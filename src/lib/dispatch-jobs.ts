@@ -82,7 +82,9 @@ export async function fetchScheduledInstalls(): Promise<ScheduledInstalls> {
 
   // Show every live/accepted job — both scheduled (has an install date) and
   // confirmed-but-not-yet-dated. Exclude only terminal statuses.
-  const TERMINAL = /cancel|lost|dead|complete|done|archiv|reject/i;
+  // The job_status enum's terminal values are declined / expired / completed; the
+  // others here stay as defensive matches for any legacy free-text status.
+  const TERMINAL = /cancel|lost|dead|complete|done|archiv|reject|declin|expir/i;
   const rows = ((data ?? []) as JobRow[]).filter((r) => !TERMINAL.test(r.status || ""));
 
   // Confirmed jobs hold their install date in an accepted job_offer (chosen_date),

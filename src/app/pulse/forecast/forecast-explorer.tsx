@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { gbp } from "@/lib/utils";
-import { buildForecast, forecastInputs, type CommittedJob, type MonthBreakdown } from "@/lib/forecast";
+import { buildForecast, forecastInputs, MODEL_DEFAULTS, type CommittedJob, type MonthBreakdown } from "@/lib/forecast";
 
 interface Props {
   cash: number | null;
@@ -69,25 +69,95 @@ const WATERFALL_GROUPS: { title: string; rows: { label: string; key: keyof Month
 // Blank for £0 so the grid reads like the spreadsheet; £ otherwise.
 const wfCell = (n: number): string => (Math.round(n) === 0 ? "—" : gbp(n));
 
+// Labelled number input for the editable-figures panel.
+function NumberField({
+  label,
+  value,
+  onChange,
+  step = 1,
+  hint,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  step?: number;
+  hint?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-foreground">{label}</span>
+      <input
+        type="number"
+        value={value}
+        step={step}
+        onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+        className="w-full rounded-md border border-border px-2 py-1 text-sm"
+      />
+      {hint ? <span className="text-[11px] text-muted-foreground">{hint}</span> : null}
+    </label>
+  );
+}
+
 export default function ForecastExplorer({ cash, receivables, overdue, openingOverride, initialDraw, committed }: Props) {
   const [drawings, setDrawings] = useState(initialDraw && initialDraw >= 2000 ? initialDraw : 2000);
   const [mktScale, setMktScale] = useState(1);
   const [hire, setHire] = useState(false);
 
+  // Editable "what-if" figures (session-only). Seeded from the model defaults; opening
+  // cash from live Xero / the page override.
+  const seedOpening = forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride }).openingCash;
+  const [openingCashEdit, setOpeningCashEdit] = useState(seedOpening);
+  const [overheads, setOverheads] = useState(MODEL_DEFAULTS.monthlyOverheads);
+  const [avgJob, setAvgJob] = useState(MODEL_DEFAULTS.avgJob);
+  const [cogsPct, setCogsPct] = useState(MODEL_DEFAULTS.cogsPct);
+  const [busGrant, setBusGrant] = useState(MODEL_DEFAULTS.busGrant);
+  const [capacity, setCapacity] = useState(MODEL_DEFAULTS.capacity);
+  const [natasha, setNatasha] = useState(MODEL_DEFAULTS.natashaUplift);
+  const [mcs, setMcs] = useState(MODEL_DEFAULTS.oneOffs.mcsRenewal);
+  const [corpTax, setCorpTax] = useState(MODEL_DEFAULTS.oneOffs.corporationTax);
+  const [accountant, setAccountant] = useState(MODEL_DEFAULTS.oneOffs.accountant);
+
+  const resetFigures = () => {
+    setOpeningCashEdit(seedOpening);
+    setOverheads(MODEL_DEFAULTS.monthlyOverheads);
+    setAvgJob(MODEL_DEFAULTS.avgJob);
+    setCogsPct(MODEL_DEFAULTS.cogsPct);
+    setBusGrant(MODEL_DEFAULTS.busGrant);
+    setCapacity(MODEL_DEFAULTS.capacity);
+    setNatasha(MODEL_DEFAULTS.natashaUplift);
+    setMcs(MODEL_DEFAULTS.oneOffs.mcsRenewal);
+    setCorpTax(MODEL_DEFAULTS.oneOffs.corporationTax);
+    setAccountant(MODEL_DEFAULTS.oneOffs.accountant);
+  };
+
+  const overrides = useMemo(
+    () => ({
+      openingCash: openingCashEdit,
+      monthlyOverheads: overheads,
+      avgJob,
+      cogsPct,
+      busGrant,
+      capacity,
+      natashaUplift: natasha,
+      oneOffs: { mcsRenewal: mcs, corporationTax: corpTax, accountant },
+    }),
+    [openingCashEdit, overheads, avgJob, cogsPct, busGrant, capacity, natasha, mcs, corpTax, accountant],
+  );
+
   // Selected scenario (base + conservative).
   const base = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { marketingScale: mktScale, hire, committed },
+      { marketingScale: mktScale, hire, committed, overrides },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed, overrides],
   );
   const cons = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { conservative: true, marketingScale: mktScale, hire, committed },
+      { conservative: true, marketingScale: mktScale, hire, committed, overrides },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed, overrides],
   );
 
   const liveCash = cash != null || openingOverride != null;
@@ -199,6 +269,32 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
           Lowest cash {gbp(min)} (base) / {gbp(minCons)} (cautious), in {base.summary.minCashMonth}.
         </div>
       </Card>
+
+      {/* Edit the figures — session-only what-if overrides */}
+      <details className="mb-6 rounded-lg border border-border bg-white px-5 py-4">
+        <summary className="cursor-pointer text-base font-semibold">
+          Edit the figures{" "}
+          <span className="text-xs font-normal text-muted-foreground">— change any number and the forecast updates live; resets on refresh</span>
+        </summary>
+        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <NumberField label="Opening cash (£)" value={openingCashEdit} onChange={setOpeningCashEdit} step={1000} />
+          <NumberField label="Monthly overheads (£)" value={overheads} onChange={setOverheads} step={100} hint="Payroll + bills, excl. draw & marketing" />
+          <NumberField label="Average job value (£)" value={avgJob} onChange={setAvgJob} step={500} />
+          <NumberField label="COGS (%)" value={Math.round(cogsPct * 100)} onChange={(n) => setCogsPct(n / 100)} step={1} hint="Materials + subbie labour" />
+          <NumberField label="BUS grant / job (£)" value={busGrant} onChange={setBusGrant} step={500} hint="New-win heat-pump grant" />
+          <NumberField label="Install capacity / mo" value={capacity} onChange={setCapacity} step={1} />
+          <NumberField label="Natasha uplift (£/mo)" value={natasha} onChange={setNatasha} step={50} hint="From month 3" />
+          <NumberField label="MCS renewal (£)" value={mcs} onChange={setMcs} step={100} hint="One-off, this month" />
+          <NumberField label="Corporation tax (£)" value={corpTax} onChange={setCorpTax} step={500} hint="One-off, November" />
+          <NumberField label="Accountant (£)" value={accountant} onChange={setAccountant} step={100} hint="One-off, February" />
+        </div>
+        <button
+          onClick={resetFigures}
+          className="mt-4 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-accent"
+        >
+          Reset to model defaults
+        </button>
+      </details>
 
       {/* Summary: base vs conservative */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">

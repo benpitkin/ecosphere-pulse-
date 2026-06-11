@@ -14,11 +14,25 @@ export interface ForecastAssumptions {
   capitalOnTapOpening: number;
 }
 
+// Session-only "what-if" overrides for the model's headline figures. Any omitted
+// field falls back to the built-in model default.
+export interface ForecastOverrides {
+  openingCash?: number;
+  monthlyOverheads?: number;
+  avgJob?: number;
+  cogsPct?: number;       // 0..1
+  busGrant?: number;      // new-win BUS grant per heat-pump job
+  capacity?: number;      // installs per month
+  natashaUplift?: number; // extra fixed cost from month 3
+  oneOffs?: { mcsRenewal?: number; corporationTax?: number; accountant?: number };
+}
+
 export interface ForecastOpts {
   conservative?: boolean;
   marketingScale?: number;
   hire?: boolean;       // hire an installer from Sep-26 (+£2.6k/mo, +1 install/wk)
   committed?: CommittedJob[]; // override the committed-job list (e.g. live Dispatch installs)
+  overrides?: ForecastOverrides;
 }
 
 // Per-month line-item breakdown behind the inflows/outflows totals (for the waterfall view).
@@ -118,18 +132,31 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
   const mktScale = opts.marketingScale ?? 1;
   const mkt = (mo: number) => MARKETING[mo] * mktScale;
 
+  // Editable overrides (session-only what-if); each falls back to the model default.
+  const ov = opts.overrides ?? {};
+  const avgJob = ov.avgJob ?? AVG_JOB;
+  const cogsPct = ov.cogsPct ?? COGS_PCT;
+  const busGrant = ov.busGrant ?? BUS_GRANT;
+  const capacity = ov.capacity ?? CAPACITY;
+  const natashaUpliftAmt = ov.natashaUplift ?? 1244;
+  const overheadsBase = ov.monthlyOverheads ?? a.monthlyOverheadsBase;
+  const mcsAmt = ov.oneOffs?.mcsRenewal ?? 2305;
+  const corpTaxAmt = ov.oneOffs?.corporationTax ?? 13000;
+  const accountantAmt = ov.oneOffs?.accountant ?? 1200;
+  const opening = ov.openingCash ?? a.openingCash;
+
   // Funnel: leads → won → installs (1-month lag, capacity-capped) → revenue.
   const scenarioFactor = opts.conservative ? 0.65 : 1;
   const won = horizon.map(({ mo }) => {
     const leads = (mkt(mo) / CPL + OTHER_LEADS) * SEASONAL[mo];
     return leads * ENGAGED_PCT[mo] * 0.97 * 0.96 * WON_PCT * scenarioFactor;
   });
-  const capAt = (i: number) => CAPACITY + (opts.hire && onFromSep26(horizon[i].year, horizon[i].mo) ? HIRE_CAPACITY : 0);
+  const capAt = (i: number) => capacity + (opts.hire && onFromSep26(horizon[i].year, horizon[i].mo) ? HIRE_CAPACITY : 0);
   const installs = horizon.map((_, i) => (i === 0 ? 0 : Math.min(won[i - 1], capAt(i))));
-  const revenue = installs.map((x) => x * AVG_JOB);
+  const revenue = installs.map((x) => x * avgJob);
 
   const months: ForecastMonth[] = [];
-  let cash = a.openingCash;
+  let cash = opening;
 
   horizon.forEach(({ mo, year, label }, i) => {
     // INFLOWS
@@ -139,10 +166,10 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
       if (j.cashY === year && j.cashM === mo) committedCash += j.value * 0.75;
       if (j.busY === year && j.busM === mo) committedBus += j.bus;
     }
-    const depositNext = i + 1 < 12 ? installs[i + 1] * AVG_JOB * 0.25 : 0;
-    const balanceNow = installs[i] * AVG_JOB * 0.75;
+    const depositNext = i + 1 < 12 ? installs[i + 1] * avgJob * 0.25 : 0;
+    const balanceNow = installs[i] * avgJob * 0.75;
     const newWinsCash = depositNext + balanceNow;
-    const busFromWins = i >= 2 ? installs[i - 2] * HP_SHARE * BUS_GRANT : 0;
+    const busFromWins = i >= 2 ? installs[i - 2] * HP_SHARE * busGrant : 0;
     let receivables = 0;
     if (i === 0) receivables = a.overdueReceivables;
     else if (i === 1) receivables = Math.max(a.existingReceivables - a.overdueReceivables, 0);
@@ -152,14 +179,14 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
 
     // OUTFLOWS — fixed
     const hireOn = opts.hire && onFromSep26(year, mo);
-    const natashaUplift = i >= 2 ? 1244 : 0;
+    const natashaUplift = i >= 2 ? natashaUpliftAmt : 0;
     const marketing = mkt(mo);
     const hireCost = hireOn ? HIRE_COST : 0;
-    const fixed = a.monthlyOverheadsBase + a.ownerDrawings + marketing + natashaUplift + hireCost;
+    const fixed = overheadsBase + a.ownerDrawings + marketing + natashaUplift + hireCost;
 
     // OUTFLOWS — variable: COGS on installed revenue + DNO/MCS per install + card/bank fees.
     const installedRevenue = revenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
-    const cogs = installedRevenue * COGS_PCT;
+    const cogs = installedRevenue * cogsPct;
     const dnoMcs = installs[i] * DNO_MCS;
     const bankFees = inflows * BANK_FEE_PCT;
     const variable = cogs + dnoMcs + bankFees;
@@ -173,9 +200,9 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     const finance = fundingCircle + gcFinance + amex;
 
     // One-offs
-    const mcsRenewal = i === 0 ? 2305 : 0;
-    const corporationTax = mo === 10 ? 13000 : 0; // Nov
-    const accountant = mo === 1 ? 1200 : 0; // Feb
+    const mcsRenewal = i === 0 ? mcsAmt : 0;
+    const corporationTax = mo === 10 ? corpTaxAmt : 0; // Nov
+    const accountant = mo === 1 ? accountantAmt : 0; // Feb
     const oneOffs = mcsRenewal + corporationTax + accountant;
 
     const outflows = fixed + variable + finance + oneOffs;
@@ -194,7 +221,7 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
         newWinsCash: r(newWinsCash),
         busFromWins: r(busFromWins),
         vat: r(vat),
-        overheads: r(a.monthlyOverheadsBase),
+        overheads: r(overheadsBase),
         ownerDrawings: r(a.ownerDrawings),
         marketing: r(marketing),
         natashaUplift: r(natashaUplift),
@@ -222,7 +249,7 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
       minCash: Math.round(closings[minIdx]),
       minCashMonth: months[minIdx].label,
       closing: Math.round(closings[closings.length - 1]),
-      netGeneration: Math.round(closings[closings.length - 1] - a.openingCash),
+      netGeneration: Math.round(closings[closings.length - 1] - opening),
     },
     installs: installs.map((x) => Math.round(x * 10) / 10),
     revenue: revenue.map((x) => Math.round(x)),
@@ -239,6 +266,18 @@ export const FORECAST_DEFAULTS = {
   monthlyOverheadsBase: 8850,
   ownerDrawings: 2000,
   capitalOnTap: 51644,
+};
+
+// Default values for the editable "what-if" figures panel — mirror the model constants
+// so the UI can seed inputs and offer "reset to defaults" without hardcoding them twice.
+export const MODEL_DEFAULTS = {
+  monthlyOverheads: FORECAST_DEFAULTS.monthlyOverheadsBase,
+  avgJob: AVG_JOB,
+  cogsPct: COGS_PCT,
+  busGrant: BUS_GRANT,
+  capacity: CAPACITY,
+  natashaUplift: 1244,
+  oneOffs: { mcsRenewal: 2305, corporationTax: 13000, accountant: 1200 },
 };
 
 export function forecastInputs(args: {

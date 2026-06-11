@@ -180,7 +180,9 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const W = 860, H = 280, padL = 64, padR = 16, padT = 16, padB = 36;
   const baseC = base.months.map((m) => m.closing);
   const consC = cons.months.map((m) => m.closing);
-  const all = [...baseC, ...consC, 0];
+  // Danger floor: one month of overheads. Cash below this = too thin a buffer.
+  const dangerFloor = overheads;
+  const all = [...baseC, ...consC, 0, dangerFloor];
   const yMin = Math.min(...all);
   const yMax = Math.max(...all);
   const span = yMax - yMin || 1;
@@ -188,6 +190,9 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const y = (v: number) => padT + (1 - (v - yMin) / span) * (H - padT - padB);
   const line = (arr: number[]) => arr.map((v, i) => `${x(i)},${y(v)}`).join(" ");
   const zeroY = y(0);
+  const dangerY = y(dangerFloor);
+  const plotBottom = H - padB;
+  const dangerMonths = baseC.filter((v) => v < dangerFloor).length;
   const minIdx = baseC.indexOf(Math.min(...baseC));
 
   return (
@@ -332,6 +337,16 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
           </div>
         </div>
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Closing cash trajectory chart">
+          {/* Danger zone — projected cash below one month of overheads */}
+          {dangerY < plotBottom ? (
+            <g>
+              <rect x={padL} y={dangerY} width={W - padL - padR} height={plotBottom - dangerY} fill="hsl(0 72% 60%)" opacity="0.08" />
+              <line x1={padL} x2={W - padR} y1={dangerY} y2={dangerY} stroke="hsl(0 72% 55%)" strokeWidth="1" strokeDasharray="4 3" />
+              <text x={W - padR} y={dangerY - 4} textAnchor="end" fontSize="10" fill="hsl(0 72% 45%)">
+                1-month buffer ({gbp(dangerFloor)})
+              </text>
+            </g>
+          ) : null}
           {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
             const v = yMin + t * span;
             return (
@@ -344,11 +359,22 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
           {yMin < 0 && yMax > 0 ? <line x1={padL} x2={W - padR} y1={zeroY} y2={zeroY} stroke="hsl(0 70% 60%)" strokeWidth="1" strokeDasharray="3 3" /> : null}
           <polyline points={line(consC)} fill="none" stroke="hsl(38 92% 50%)" strokeWidth="2" strokeDasharray="5 4" />
           <polyline points={line(baseC)} fill="none" stroke="hsl(180 70% 35%)" strokeWidth="2.5" />
-          {baseC.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r="2.5" fill="hsl(180 70% 35%)" />)}
+          {baseC.map((v, i) => (
+            <circle key={i} cx={x(i)} cy={y(v)} r={v < dangerFloor ? 3.5 : 2.5} fill={v < dangerFloor ? "hsl(0 72% 55%)" : "hsl(180 70% 35%)"} />
+          ))}
           <circle cx={x(minIdx)} cy={y(baseC[minIdx])} r="5" fill="none" stroke="hsl(38 92% 50%)" strokeWidth="2" />
           {base.months.map((mn, i) => (i % 2 === 0 ?
             <text key={i} x={x(i)} y={H - 12} textAnchor="middle" fontSize="11" fill="hsl(215 16% 47%)">{mn.label}</text> : null))}
         </svg>
+        {dangerMonths > 0 ? (
+          <p className="mt-2 text-xs font-medium text-red-600">
+            ⚠ Projected cash drops below a one-month overheads buffer ({gbp(dangerFloor)}) in {dangerMonths} of 12 months — tightest in {base.summary.minCashMonth}.
+          </p>
+        ) : (
+          <p className="mt-2 text-xs font-medium text-emerald-600">
+            ✓ Projected cash stays above a one-month overheads buffer ({gbp(dangerFloor)}) all year.
+          </p>
+        )}
       </Card>
 
       {/* Monthly table (base) */}

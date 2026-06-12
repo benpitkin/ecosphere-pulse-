@@ -289,15 +289,6 @@ export async function getXeroSnapshot(): Promise<XeroSnapshot> {
   }
 }
 
-/** Xero dates arrive as ISO ("2026-05-31T00:00:00") or "/Date(1717113600000+0000)/". */
-function parseXeroDate(v: string | undefined): string | null {
-  if (!v) return null;
-  const m = /\/Date\((\d+)/.exec(v);
-  if (m) return new Date(Number(m[1])).toISOString().slice(0, 10);
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-}
-
 /** Full balance-sheet line index (account name -> value), for the liabilities view. */
 export async function getBalanceSheetIndex(): Promise<{ lines: Record<string, number>; error?: string }> {
   const auth = await getAuth();

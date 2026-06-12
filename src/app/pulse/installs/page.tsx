@@ -153,7 +153,11 @@ export default async function InstallsPage() {
                   return (
                     <div key={r.key} className="flex items-center gap-3">
                       <div className="w-14 shrink-0 text-sm font-medium">{r.label}</div>
-                      <div className="relative h-6 flex-1 rounded bg-[hsl(210_40%_96%)]">
+                      <div
+                        className="relative h-6 flex-1 rounded bg-[hsl(210_40%_96%)]"
+                        role="img"
+                        aria-label={`${r.label}: ${r.count} of ${CAPACITY} installs booked${over ? " — over capacity" : ""}`}
+                      >
                         <div className={`absolute inset-y-0 left-0 rounded ${tone}`} style={{ width: `${Math.max(pct, r.count > 0 ? 4 : 0)}%` }} />
                         {over ? <div className="absolute inset-y-0 right-1 flex items-center text-xs font-bold text-red-600">over</div> : null}
                       </div>

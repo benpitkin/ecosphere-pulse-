@@ -248,6 +248,15 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
     URL.revokeObjectURL(url);
   };
 
+  // ---- unit economics per install (reacts to the editable figures above) ----
+  // Mirrors the cash model exactly: COGS is on the customer price; the BUS grant
+  // is a SEPARATE government inflow on heat-pump jobs, not netted into the price.
+  const DNO_PER_INSTALL = 65; // DNO + MCS per install (regulatory), per the model
+  const cogsPerJob = avgJob * cogsPct;
+  const contribution = avgJob - cogsPerJob - DNO_PER_INSTALL; // before fixed overheads
+  const contributionWithBus = contribution + busGrant; // heat-pump jobs only
+  const marginPct = avgJob > 0 ? (contribution / avgJob) * 100 : 0;
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8">
       <div className="mb-1 flex items-end justify-between">
@@ -359,6 +368,38 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
           Reset to model defaults
         </button>
       </details>
+
+      {/* Unit economics — what each install is worth, live from the figures above */}
+      <Card className="mb-6 p-5">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Unit economics · per install</h2>
+          <span className="text-xs text-muted-foreground">moves with the figures above</span>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-lg border border-border p-4">
+            <div className="text-xs font-medium text-muted-foreground">Gross contribution</div>
+            <div className="mt-1 text-2xl font-bold text-accent">{gbp(contribution)}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">{marginPct.toFixed(0)}% of price · before fixed overheads</div>
+          </div>
+          <div className="rounded-lg border border-border p-4">
+            <div className="text-xs font-medium text-muted-foreground">With BUS grant (heat pump)</div>
+            <div className="mt-1 text-2xl font-bold text-emerald-600">{gbp(contributionWithBus)}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">+ {gbp(busGrant)} grant, lands ~8 wks later</div>
+          </div>
+          <div className="rounded-lg border border-border p-4">
+            <div className="text-xs font-medium text-muted-foreground">Build-up</div>
+            <dl className="mt-1 space-y-0.5 text-xs">
+              <div className="flex justify-between"><dt className="text-muted-foreground">Customer price</dt><dd className="font-medium">{gbp(avgJob)}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">− Materials + subbie ({Math.round(cogsPct * 100)}%)</dt><dd className="text-red-600">−{gbp(cogsPerJob)}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">− DNO + MCS</dt><dd className="text-red-600">−{gbp(DNO_PER_INSTALL)}</dd></div>
+              <div className="flex justify-between border-t border-border pt-0.5 font-semibold"><dt>Contribution</dt><dd className="text-accent">{gbp(contribution)}</dd></div>
+            </dl>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Contribution is what each job leaves toward fixed overheads ({gbp(overheads)}/mo) and your draw — not profit. The BUS grant is government money on heat-pump jobs (~90% of yours), separate from the customer price.
+        </p>
+      </Card>
 
       {/* Summary: base vs conservative */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">

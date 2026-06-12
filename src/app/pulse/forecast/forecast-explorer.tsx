@@ -233,10 +233,31 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const bestClosing = Math.max(...compareRows.map((r) => r.closing));
   const bestLowest = Math.max(...compareRows.map((r) => r.minCash));
 
+  // Export the base-case monthly forecast as CSV (for the bank / accountant).
+  const downloadCsv = () => {
+    const rows = [["Month", "Money in", "Money out", "Net", "Closing cash"]];
+    for (const mn of base.months) {
+      rows.push([mn.label, String(Math.round(mn.inflows)), String(Math.round(mn.outflows)), String(Math.round(mn.net)), String(Math.round(mn.closing))]);
+    }
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "ecosphere-cash-forecast.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8">
       <div className="mb-1 flex items-end justify-between">
         <h1 className="text-2xl font-bold tracking-tight">12-month cash forecast</h1>
+        <button
+          onClick={downloadCsv}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-accent"
+        >
+          Download CSV
+        </button>
       </div>
       <p className="mb-6 text-sm text-muted-foreground">
         Live port of your model · opening cash {liveCash ? (openingOverride != null ? `set to ${gbp(openingCash)}` : "live from Xero") : `placeholder ${gbp(openingCash)}`} · receivables live · drag the levers to see what is possible

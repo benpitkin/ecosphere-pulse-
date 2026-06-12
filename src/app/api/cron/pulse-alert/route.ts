@@ -8,6 +8,8 @@
 import { NextResponse } from "next/server";
 import { buildPulse } from "@/lib/pulse";
 import { postSlack } from "@/lib/slack";
+import { recordSnapshot } from "@/lib/snapshots";
+import { fetchScheduledInstalls } from "@/lib/dispatch-jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,15 @@ async function handle(req: Request) {
 
   const pulse = await buildPulse();
   const m = pulse.metrics;
+
+  // Capture today's snapshot for the cockpit trend lines (best-effort, one row/day).
+  try {
+    const installs = await fetchScheduledInstalls();
+    await recordSnapshot(pulse, { value: installs.total_value, count: installs.jobs.length });
+  } catch {
+    /* snapshot is best-effort — never block the digest */
+  }
+
   const flagged = pulse.actions.filter((a) => a.severity !== "info");
 
   // Only ping when something actually needs attention.

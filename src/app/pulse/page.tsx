@@ -9,6 +9,7 @@ import { buildPulse } from "@/lib/pulse";
 import { buildForecast, forecastInputs } from "@/lib/forecast";
 import { getCommittedJobs, fetchScheduledInstalls } from "@/lib/dispatch-jobs";
 import { buildInsights, type InsightTone } from "@/lib/insights";
+import { getSnapshots, type MetricSnapshot } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";
 
@@ -19,14 +20,30 @@ const TONE: Record<InsightTone, { ring: string; chip: string; icon: React.ReactN
   info: { ring: "border-l-4 border-slate-300", chip: "bg-slate-100 text-slate-600", icon: <Info size={16} /> },
 };
 
-function Tile({ label, value, sub, icon, tone = "default" }: {
+function Spark({ series, color }: { series: number[]; color: string }) {
+  if (series.length < 2) return null;
+  const lo = Math.min(...series), hi = Math.max(...series), span = hi - lo || 1;
+  const pts = series
+    .map((v, i) => `${((i / (series.length - 1)) * 88).toFixed(1)},${(25 - ((v - lo) / span) * 23).toFixed(1)}`)
+    .join(" ");
+  return (
+    <svg viewBox="0 0 88 26" width="72" height="26" className="shrink-0" aria-hidden="true">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function Tile({ label, value, sub, icon, tone = "default", series, deltaText, deltaTone, sparkColor }: {
   label: string; value: string; sub?: string; icon: React.ReactNode;
   tone?: "default" | "good" | "warn" | "bad";
+  series?: number[]; deltaText?: string; deltaTone?: "good" | "bad" | "neutral"; sparkColor?: string;
 }) {
   const accent =
     tone === "good" ? "bg-emerald-400" : tone === "warn" ? "bg-amber-400" : tone === "bad" ? "bg-red-400" : "bg-transparent";
   const valueColor =
     tone === "good" ? "text-emerald-600" : tone === "warn" ? "text-amber-600" : tone === "bad" ? "text-red-600" : "text-foreground";
+  const deltaColor =
+    deltaTone === "good" ? "text-emerald-600" : deltaTone === "bad" ? "text-red-600" : "text-muted-foreground";
   return (
     <Card className="relative overflow-hidden p-5">
       <span className={`absolute inset-y-0 left-0 w-1 ${accent}`} />
@@ -34,10 +51,39 @@ function Tile({ label, value, sub, icon, tone = "default" }: {
         <span className="text-sm font-medium text-muted-foreground">{label}</span>
         <span className="text-muted-foreground">{icon}</span>
       </div>
-      <div className={`mt-2 text-3xl font-bold tracking-tight ${valueColor}`}>{value}</div>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <div className={`text-3xl font-bold tracking-tight ${valueColor}`}>{value}</div>
+        {series && sparkColor ? <Spark series={series} color={sparkColor} /> : null}
+      </div>
       {sub ? <div className="mt-1 text-xs text-muted-foreground">{sub}</div> : null}
+      {deltaText ? <div className={`mt-1 text-xs font-medium ${deltaColor}`}>{deltaText}</div> : null}
     </Card>
   );
+}
+
+const SPARK_COLOR = { good: "#1D9E75", bad: "#E24B4A", neutral: "#888780" } as const;
+
+// Build a tile's trend (sparkline series + delta) from the snapshot history.
+// Returns {} until there are at least 2 days of history, so tiles render cleanly
+// from day one and light up as data accumulates.
+function trendFor(
+  history: MetricSnapshot[],
+  key: keyof MetricSnapshot,
+  goodWhen: "up" | "down",
+  fmt: (n: number) => string,
+): { series?: number[]; deltaText?: string; deltaTone?: "good" | "bad" | "neutral"; sparkColor?: string } {
+  const series = history.map((s) => s[key]).filter((v): v is number => typeof v === "number");
+  if (series.length < 2) return {};
+  const delta = series[series.length - 1] - series[0];
+  const dir = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
+  const tone: "good" | "bad" | "neutral" = dir === "flat" ? "neutral" : dir === goodWhen ? "good" : "bad";
+  const arrow = dir === "up" ? "↑" : dir === "down" ? "↓" : "→";
+  return {
+    series,
+    deltaText: `${arrow} ${fmt(Math.abs(delta))} since ${history[0].date.slice(5)}`,
+    deltaTone: tone,
+    sparkColor: SPARK_COLOR[tone],
+  };
 }
 
 export default async function PulsePage() {
@@ -59,6 +105,18 @@ export default async function PulsePage() {
     { committed },
   );
   const insights = buildInsights(pulse, forecast);
+  const history = await getSnapshots();
+
+  // One-line health verdict from the ranked actions (works without history).
+  const concerns = pulse.actions.filter((a) => a.severity !== "info");
+  const verdictTone: "good" | "warn" | "bad" =
+    concerns.some((a) => a.severity === "critical") ? "bad" : concerns.length ? "warn" : "good";
+  const verdictWord = verdictTone === "bad" ? "At risk" : verdictTone === "warn" ? "Watch" : "Healthy";
+  const verdictLine = concerns.length
+    ? concerns.slice(0, 2).map((a) => a.title).join(" · ")
+    : "No thresholds tripped — cash, runway and pipeline are within target.";
+  const verdictClr =
+    verdictTone === "bad" ? "bg-red-50 text-red-900" : verdictTone === "warn" ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-900";
 
   const runwayTone =
     m.runway_months == null ? "default"
@@ -90,6 +148,17 @@ export default async function PulsePage() {
             Connect Xero <ArrowRight size={15} />
           </Link>
         ) : null}
+      </div>
+
+      {/* Business-health verdict */}
+      <div className={`mb-6 flex items-start gap-3 rounded-lg px-4 py-3 ${verdictClr}`}>
+        {verdictTone === "good"
+          ? <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
+          : <AlertTriangle size={20} className="mt-0.5 shrink-0" />}
+        <div>
+          <div className="text-sm font-semibold">{verdictWord}</div>
+          <div className="text-sm">{verdictLine}.</div>
+        </div>
       </div>
 
       {/* This week — top actions */}
@@ -128,26 +197,32 @@ export default async function PulsePage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Tile label="Cash on hand" value={gbp(m.cash)}
           sub={m.available_liquidity != null ? `${gbp(m.available_liquidity)} incl. facility headroom` : undefined}
-          icon={<Banknote size={18} />} />
+          icon={<Banknote size={18} />} {...trendFor(history, "cash", "up", gbp)} />
         <Tile label="Runway" value={m.runway_months != null ? `${m.runway_months} mo` : "—"}
           sub={`at ${gbp(m.overheads_used)}/mo overheads${m.runway_is_estimate ? " · est." : ""}`}
-          icon={<Gauge size={18} />} tone={runwayTone} />
+          icon={<Gauge size={18} />} tone={runwayTone}
+          {...trendFor(history, "runway_months", "up", (n) => `${n.toFixed(1)} mo`)} />
         <Tile label="Overdue to chase" value={gbp(m.overdue)}
           sub={m.receivables != null ? `of ${gbp(m.receivables)} owed to you` : undefined}
-          icon={<AlertTriangle size={18} />} tone={m.overdue && m.overdue > 0 ? "warn" : "good"} />
+          icon={<AlertTriangle size={18} />} tone={m.overdue && m.overdue > 0 ? "warn" : "good"}
+          {...trendFor(history, "overdue", "down", gbp)} />
         <Tile label="Working capital" value={gbp(m.working_capital)}
           sub="current assets − current liabilities"
-          icon={<Wallet size={18} />} tone={m.working_capital != null && m.working_capital < 0 ? "bad" : "default"} />
+          icon={<Wallet size={18} />} tone={m.working_capital != null && m.working_capital < 0 ? "bad" : "default"}
+          {...trendFor(history, "working_capital", "up", gbp)} />
         <Tile label="Weighted pipeline"
           value={pulse.pipeline.configured ? gbp(pulse.pipeline.weighted_value) : "—"}
           sub={pulse.pipeline.configured ? `${pulse.pipeline.open_count} active · ${gbp(pulse.pipeline.open_value)} raw` : "connect a sales pipeline"}
-          icon={<TrendingUp size={18} />} tone="good" />
+          icon={<TrendingUp size={18} />} tone="good"
+          {...trendFor(history, "weighted_pipeline", "up", gbp)} />
         <Tile label="Net equity" value={gbp(m.net_equity)}
-          sub="total assets − total liabilities" icon={<CircleDot size={18} />} />
+          sub="total assets − total liabilities" icon={<CircleDot size={18} />}
+          {...trendFor(history, "net_equity", "up", gbp)} />
         <Tile label="Accepted jobs"
           value={installs.jobs.length ? gbp(installs.total_value) : "—"}
           sub={installs.jobs.length ? `${installs.jobs.length} accepted · next ${nextInstall ?? "TBC"}` : "none in Dispatch yet"}
-          icon={<CalendarClock size={18} />} tone={installs.jobs.length ? "good" : "default"} />
+          icon={<CalendarClock size={18} />} tone={installs.jobs.length ? "good" : "default"}
+          {...trendFor(history, "booked_value", "up", gbp)} />
       </div>
 
       {/* Sales funnel */}

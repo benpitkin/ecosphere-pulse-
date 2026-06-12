@@ -151,9 +151,24 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     const leads = (mkt(mo) / CPL + OTHER_LEADS) * SEASONAL[mo];
     return leads * ENGAGED_PCT[mo] * 0.97 * 0.96 * WON_PCT * scenarioFactor;
   });
+
+  // Committed Dispatch jobs are already-won deals that consume crew capacity and
+  // are counted in cash via `committedCash` below. The marketing funnel must
+  // therefore only fill the REMAINING capacity each month — otherwise a booked
+  // install is counted twice (once as committed, once as a funnel "new win"),
+  // overstating near-term and year-end cash. Share capacity: committed first.
+  const committedInstalls = horizon.map(({ mo, year }) =>
+    committed.filter((j) => j.cashY === year && j.cashM === mo).length,
+  );
+  const committedRevenue = horizon.map(({ mo, year }) =>
+    committed.reduce((s, j) => (j.cashY === year && j.cashM === mo ? s + j.value : s), 0),
+  );
   const capAt = (i: number) => capacity + (opts.hire && onFromSep26(horizon[i].year, horizon[i].mo) ? HIRE_CAPACITY : 0);
-  const installs = horizon.map((_, i) => (i === 0 ? 0 : Math.min(won[i - 1], capAt(i))));
-  const revenue = installs.map((x) => x * avgJob);
+  // Funnel installs = net-new beyond committed, capped by the capacity left that month.
+  const fInstalls = horizon.map((_, i) =>
+    i === 0 ? 0 : Math.min(won[i - 1], Math.max(capAt(i) - committedInstalls[i], 0)),
+  );
+  const fRevenue = fInstalls.map((x) => x * avgJob);
 
   const months: ForecastMonth[] = [];
   let cash = opening;
@@ -166,14 +181,14 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
       if (j.cashY === year && j.cashM === mo) committedCash += j.value * 0.75;
       if (j.busY === year && j.busM === mo) committedBus += j.bus;
     }
-    const depositNext = i + 1 < 12 ? installs[i + 1] * avgJob * 0.25 : 0;
-    const balanceNow = installs[i] * avgJob * 0.75;
+    const depositNext = i + 1 < 12 ? fInstalls[i + 1] * avgJob * 0.25 : 0;
+    const balanceNow = fInstalls[i] * avgJob * 0.75;
     const newWinsCash = depositNext + balanceNow;
-    const busFromWins = i >= 2 ? installs[i - 2] * HP_SHARE * busGrant : 0;
+    const busFromWins = i >= 2 ? fInstalls[i - 2] * HP_SHARE * busGrant : 0;
     let receivables = 0;
     if (i === 0) receivables = a.overdueReceivables;
     else if (i === 1) receivables = Math.max(a.existingReceivables - a.overdueReceivables, 0);
-    const vat = (i === 1 ? 2877 : 0) + (i >= 3 ? revenue[i] * 0.033 : 0);
+    const vat = (i === 1 ? 2877 : 0) + (i >= 3 ? fRevenue[i] * 0.033 : 0);
 
     const inflows = committedCash + committedBus + newWinsCash + busFromWins + receivables + vat;
 
@@ -185,9 +200,9 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     const fixed = overheadsBase + a.ownerDrawings + marketing + natashaUplift + hireCost;
 
     // OUTFLOWS — variable: COGS on installed revenue + DNO/MCS per install + card/bank fees.
-    const installedRevenue = revenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
+    const installedRevenue = fRevenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
     const cogs = installedRevenue * cogsPct;
-    const dnoMcs = installs[i] * DNO_MCS;
+    const dnoMcs = (fInstalls[i] + committedInstalls[i]) * DNO_MCS;
     const bankFees = inflows * BANK_FEE_PCT;
     const variable = cogs + dnoMcs + bankFees;
 
@@ -251,8 +266,10 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
       closing: Math.round(closings[closings.length - 1]),
       netGeneration: Math.round(closings[closings.length - 1] - opening),
     },
-    installs: installs.map((x) => Math.round(x * 10) / 10),
-    revenue: revenue.map((x) => Math.round(x)),
+    // Display totals = funnel net-new + committed throughput (the cash engine above
+    // keeps them separate so nothing is double-counted; the chart shows total activity).
+    installs: fInstalls.map((x, i) => Math.round((x + committedInstalls[i]) * 10) / 10),
+    revenue: fRevenue.map((x, i) => Math.round(x + committedRevenue[i])),
   };
 }
 

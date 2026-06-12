@@ -9,7 +9,7 @@ import { buildPulse } from "@/lib/pulse";
 import { buildForecast, forecastInputs } from "@/lib/forecast";
 import { getCommittedJobs, fetchScheduledInstalls } from "@/lib/dispatch-jobs";
 import { buildInsights, type InsightTone } from "@/lib/insights";
-import { getSnapshots, type MetricSnapshot } from "@/lib/snapshots";
+import { getSnapshots, summarizeChange, type MetricSnapshot } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +106,9 @@ export default async function PulsePage() {
   );
   const insights = buildInsights(pulse, forecast);
   const history = await getSnapshots();
+  const change = summarizeChange(history);
+  const fmtSince = (iso: string) =>
+    new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
   // One-line health verdict from the ranked actions (works without history).
   const concerns = pulse.actions.filter((a) => a.severity !== "info");
@@ -160,6 +163,30 @@ export default async function PulsePage() {
           <div className="text-sm">{verdictLine}.</div>
         </div>
       </div>
+
+      {/* What changed — week-over-week movement from the snapshot history */}
+      {change ? (
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-white px-4 py-3">
+          <span className="text-sm font-semibold">What changed</span>
+          <span className="text-xs text-muted-foreground">since {fmtSince(change.sinceDate)} · {change.days}d</span>
+          {change.lines.length ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {change.lines.map((l) => (
+                <span
+                  key={l.label}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${
+                    l.tone === "good" ? "bg-emerald-50 text-emerald-700" : l.tone === "bad" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {l.label} {l.deltaText}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-sm text-muted-foreground">Steady — no material moves.</span>
+          )}
+        </div>
+      ) : null}
 
       {/* This week — top actions */}
       {(m.overdue && m.overdue > 0) || unassignedCount > 0 ? (

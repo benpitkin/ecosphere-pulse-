@@ -99,3 +99,25 @@ describe("buildForecast — committed jobs share capacity (no double-count)", ()
     if (sep) expect(sep.breakdown.committedCash).toBeGreaterThan(0);
   });
 });
+
+describe("buildForecast — scenario levers move the needle the right way", () => {
+  const a = forecastInputs({ cash: 45000, receivables: 20000, overdue: 5000 });
+
+  it("the conservative case closes lower than the base case", () => {
+    const base = buildForecast(a).summary.closing;
+    const cons = buildForecast(a, { conservative: true }).summary.closing;
+    expect(cons).toBeLessThan(base);
+  });
+
+  it("more marketing yields at least as many installs over the year", () => {
+    const lean = buildForecast(a, { marketingScale: 0.5 }).installs.reduce((s, n) => s + n, 0);
+    const push = buildForecast(a, { marketingScale: 2 }).installs.reduce((s, n) => s + n, 0);
+    expect(push).toBeGreaterThanOrEqual(lean);
+  });
+
+  it("editable overrides change the result; the default stays stable", () => {
+    const baseClosing = buildForecast(a).summary.closing;
+    const leaner = buildForecast(a, { overrides: { cogsPct: 0.5 } }).summary.closing;
+    expect(leaner).toBeGreaterThan(baseClosing); // lower COGS → more cash
+  });
+});

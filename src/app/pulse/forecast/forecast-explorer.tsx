@@ -69,6 +69,17 @@ const WATERFALL_GROUPS: { title: string; rows: { label: string; key: keyof Month
 // Blank for £0 so the grid reads like the spreadsheet; £ otherwise.
 const wfCell = (n: number): string => (Math.round(n) === 0 ? "—" : gbp(n));
 
+interface Pinned {
+  id: number;
+  name: string;
+  settings: string;
+  closing: number;
+  minCash: number;
+  minMonth: string;
+  net: number;
+  danger: number;
+}
+
 // Labelled number input for the editable-figures panel.
 function NumberField({
   label,
@@ -116,6 +127,10 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const [mcs, setMcs] = useState(MODEL_DEFAULTS.oneOffs.mcsRenewal);
   const [corpTax, setCorpTax] = useState(MODEL_DEFAULTS.oneOffs.corporationTax);
   const [accountant, setAccountant] = useState(MODEL_DEFAULTS.oneOffs.accountant);
+
+  // Pinned scenarios for side-by-side comparison (session-only).
+  const [scenarios, setScenarios] = useState<Pinned[]>([]);
+  const [scnName, setScnName] = useState("");
 
   const resetFigures = () => {
     setOpeningCashEdit(seedOpening);
@@ -194,6 +209,29 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const plotBottom = H - padB;
   const dangerMonths = baseC.filter((v) => v < dangerFloor).length;
   const minIdx = baseC.indexOf(Math.min(...baseC));
+
+  // ---- scenario comparison ----
+  const settingsLabel = `${gbp(drawings)} draw · ${mktScale}× mkt${hire ? " · +hire" : ""}`;
+  const pinScenario = () =>
+    setScenarios((s) => [
+      ...s,
+      {
+        id: s.length ? s[s.length - 1].id + 1 : 1,
+        name: scnName.trim() || `Scenario ${s.length + 1}`,
+        settings: settingsLabel,
+        closing: base.summary.closing,
+        minCash: base.summary.minCash,
+        minMonth: base.summary.minCashMonth,
+        net: base.summary.netGeneration,
+        danger: dangerMonths,
+      },
+    ]);
+  const compareRows: Pinned[] = [
+    { id: 0, name: "Current", settings: settingsLabel, closing: base.summary.closing, minCash: base.summary.minCash, minMonth: base.summary.minCashMonth, net: base.summary.netGeneration, danger: dangerMonths },
+    ...scenarios,
+  ];
+  const bestClosing = Math.max(...compareRows.map((r) => r.closing));
+  const bestLowest = Math.max(...compareRows.map((r) => r.minCash));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8">
@@ -326,6 +364,65 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
           </div>
         </Card>
       </div>
+
+      {/* Compare scenarios */}
+      <Card className="mb-6 p-5">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Compare scenarios</h2>
+          <div className="flex items-center gap-2">
+            <input
+              value={scnName}
+              onChange={(e) => setScnName(e.target.value)}
+              placeholder="Name (optional)"
+              className="w-40 rounded-md border border-border px-2 py-1 text-sm"
+            />
+            <button onClick={pinScenario} className="rounded-md border border-accent bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20">
+              Pin current
+            </button>
+            {scenarios.length > 0 ? (
+              <button onClick={() => setScenarios([])} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-accent">
+                Clear
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Set the levers and figures above, pin it, then change them and pin again to line up the big calls side by side. Session-only.
+        </p>
+        {scenarios.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No saved scenarios yet — adjust the levers, then &ldquo;Pin current&rdquo;.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="py-1 pr-3 font-medium">Scenario</th>
+                  <th className="py-1 pr-3 text-right font-medium">Closing cash</th>
+                  <th className="py-1 pr-3 text-right font-medium">Lowest cash</th>
+                  <th className="py-1 pr-3 text-right font-medium">Net generated</th>
+                  <th className="py-1 text-right font-medium">Months at risk</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compareRows.map((r) => (
+                  <tr key={r.id} className={`border-b border-border ${r.name === "Current" ? "bg-accent/5" : ""}`}>
+                    <td className="py-1.5 pr-3">
+                      <div className="font-medium">{r.name}</div>
+                      <div className="text-xs text-muted-foreground">{r.settings}</div>
+                    </td>
+                    <td className={`py-1.5 pr-3 text-right font-semibold ${r.closing === bestClosing ? "text-emerald-600" : ""}`}>{gbp(r.closing)}</td>
+                    <td className={`py-1.5 pr-3 text-right ${r.minCash < 0 ? "text-red-600" : r.minCash < 10000 ? "text-amber-600" : r.minCash === bestLowest ? "text-emerald-600" : ""}`}>
+                      {gbp(r.minCash)} <span className="text-xs text-muted-foreground">({r.minMonth})</span>
+                    </td>
+                    <td className={`py-1.5 pr-3 text-right ${r.net < 0 ? "text-red-600" : "text-emerald-600"}`}>{gbp(r.net)}</td>
+                    <td className={`py-1.5 text-right ${r.danger > 0 ? "text-red-600" : "text-emerald-600"}`}>{r.danger}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       {/* Cash trajectory chart */}
       <Card className="mb-6 p-5">

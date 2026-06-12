@@ -54,10 +54,19 @@ const EMPTY: XeroSnapshot = {
 
 // --- token handling --------------------------------------------------------
 
+type XeroAuth =
+  | { ok: true; accessToken: string; tenantId: string; tenantName: string | null }
+  | { ok: false; error?: string };
+
+// Collapse concurrent token refreshes within this server instance into a single
+// in-flight call. Xero rotates the (single-use) refresh token on every refresh, so
+// parallel near-expiry requests each refreshing would invalidate one another. Cross-
+// instance races on serverless remain possible but are far rarer than per-request
+// parallelism (a page load firing several Xero reads at once).
+let refreshInFlight: Promise<XeroAuth> | null = null;
+
 /** Get a valid access token + tenant id, refreshing (and persisting) if stale. */
-async function getAuth(): Promise<
-  { ok: true; accessToken: string; tenantId: string; tenantName: string | null } | { ok: false; error?: string }
-> {
+async function getAuth(): Promise<XeroAuth> {
   const clientId = process.env.XERO_CLIENT_ID;
   const clientSecret = process.env.XERO_CLIENT_SECRET;
   if (!clientId || !clientSecret) return { ok: false, error: "env: missing XERO_CLIENT_ID/SECRET" };
@@ -100,7 +109,26 @@ async function getAuth(): Promise<
     return { ok: true, accessToken: conn.access_token, tenantId: conn.tenant_id, tenantName: null };
   }
 
-  // Refresh — Xero rotates the refresh token, so persist whatever comes back.
+  // Refresh — deduped via singleflight so concurrent near-expiry requests rotate the
+  // single-use refresh token exactly once.
+  const refreshToken = conn.refresh_token;
+  const tenantId = conn.tenant_id;
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh(refreshToken, tenantId, clientId, clientSecret).finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+// Performs the actual Xero token refresh and persists the rotated tokens, returning a
+// fresh access token. Run at most once at a time via getAuth's `refreshInFlight`.
+async function doRefresh(
+  refreshToken: string,
+  tenantId: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<XeroAuth> {
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   let body: { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
   try {
@@ -110,10 +138,7 @@ async function getAuth(): Promise<
         Authorization: `Basic ${basic}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: conn.refresh_token,
-      }),
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
       cache: "no-store",
     });
     body = await res.json();
@@ -125,17 +150,18 @@ async function getAuth(): Promise<
   }
 
   const expiresAt = new Date(Date.now() + (body.expires_in ?? 1800) * 1000).toISOString();
+  const admin = createAdminClient();
   await admin
     .from("xero_connection")
     .update({
       access_token: body.access_token,
-      refresh_token: body.refresh_token ?? conn.refresh_token,
+      refresh_token: body.refresh_token ?? refreshToken,
       access_expires_at: expiresAt,
       updated_at: new Date().toISOString(),
     })
     .eq("id", true);
 
-  return { ok: true, accessToken: body.access_token, tenantId: conn.tenant_id, tenantName: null };
+  return { ok: true, accessToken: body.access_token, tenantId, tenantName: null };
 }
 
 async function xeroGet(path: string, accessToken: string, tenantId: string): Promise<Record<string, unknown>> {

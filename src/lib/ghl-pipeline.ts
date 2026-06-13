@@ -263,3 +263,131 @@ export async function getProposals(): Promise<{ proposals: ProposalOpp[]; error?
     return { proposals: [], error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+// --- lead quality / pipeline reality -----------------------------------------
+// Separates the genuinely-engaged pipeline from never-engaged inbound and
+// dead-but-still-open leads — the ones that warp "are we actually growing?".
+
+export type StageClass = "inbound" | "engaged" | "won" | "postsale" | "dead" | "nurture";
+
+/** Classify a stage by lifecycle position from its name. Order matters:
+ *  dead / won / post-sale are checked before the broad "engaged" net. */
+export function classifyStage(name: string): StageClass {
+  const n = (name || "").toLowerCase();
+  if (/nurtur/.test(n)) return "nurture";
+  if (/lost|dead|unqualified|not proceeding|gone cold|cancel|closed|abandon/.test(n)) return "dead";
+  if (/aftercare|service plan|ongoing|install complete|installation complete|handover/.test(n)) return "postsale";
+  if (/accepted|install pending|deposit|installation booked|materials ordered|installation in progress|quote accepted|\bwon\b/.test(n)) return "won";
+  if (/engaged|survey|proposal|quote sent|quote follow|awaiting quote|callback|\bcontacted/.test(n)) return "engaged";
+  if (/new enquiry|uncontacted|new lead|contact attempt|contact attempted|no contact|follow up sent|^contact$/.test(n)) return "inbound";
+  return "inbound"; // unknown early stage → treat as inbound (conservative)
+}
+
+type ClassTally = Record<StageClass, { count: number; value: number }>;
+const emptyTally = (): ClassTally => ({
+  inbound: { count: 0, value: 0 }, engaged: { count: 0, value: 0 }, won: { count: 0, value: 0 },
+  postsale: { count: 0, value: 0 }, dead: { count: 0, value: 0 }, nurture: { count: 0, value: 0 },
+});
+
+export interface LeadQuality {
+  configured: boolean;
+  pipeline_name: string | null;
+  open: ClassTally;            // current open pipeline split by lifecycle class
+  open_total: number;
+  won: { count: number; value: number };       // all-time decided outcomes
+  lost: { count: number; value: number };
+  abandoned: { count: number; value: number };
+  engaged_count: number;       // genuinely live deals (engaged + accepted/won-in-progress)
+  unengaged_count: number;     // inbound, never engaged
+  dead_open_count: number;     // dead but still sitting open — the cleanup target
+  engaged_share: number | null; // engaged / (engaged + inbound) of the live pipeline
+  win_rate: number | null;      // won / (won + lost + abandoned), all-time
+  avg_won_value: number | null;
+  error?: string;
+}
+
+const oppVal = (o: Record<string, unknown>) => (typeof o.monetaryValue === "number" ? (o.monetaryValue as number) : 0);
+
+async function countStatus(locationId: string, pipelineId: string, status: string): Promise<{ count: number; value: number }> {
+  let count = 0, value = 0;
+  for (let page = 1; page <= 10; page++) {
+    const body = await ghlFetch(`/opportunities/search?location_id=${locationId}&pipeline_id=${pipelineId}&status=${status}&limit=100&page=${page}`);
+    const opps = (body.opportunities as Array<Record<string, unknown>>) ?? [];
+    if (!opps.length) break;
+    for (const o of opps) { count += 1; value += oppVal(o); }
+    if (opps.length < 100) break;
+  }
+  return { count, value: Math.round(value) };
+}
+
+/** Pipeline reality: how much of the "open" pipeline is genuinely engaged vs
+ *  never-engaged inbound vs dead-but-open, plus the all-time win rate. Auto-picks
+ *  the sales pipeline (GHL_SALES_PIPELINE_ID, else a name match, else the largest). */
+export async function fetchLeadQuality(): Promise<LeadQuality> {
+  const base: LeadQuality = {
+    configured: false, pipeline_name: null, open: emptyTally(), open_total: 0,
+    won: { count: 0, value: 0 }, lost: { count: 0, value: 0 }, abandoned: { count: 0, value: 0 },
+    engaged_count: 0, unengaged_count: 0, dead_open_count: 0,
+    engaged_share: null, win_rate: null, avg_won_value: null,
+  };
+  const apiKey = process.env.GHL_API_KEY;
+  const locationId = process.env.GHL_LOCATION_ID;
+  if (!apiKey || !locationId) return base;
+
+  let pipelineId = process.env.GHL_SALES_PIPELINE_ID || process.env.GHL_INSTALL_PIPELINE_ID || "";
+  let stageName = new Map<string, string>();
+  let pipelineName: string | null = null;
+  try {
+    const pipes = await ghlFetch(`/opportunities/pipelines?locationId=${locationId}`);
+    const list = (pipes.pipelines as Array<{ id: string; name: string; stages?: PipelineStage[] }>) ?? [];
+    const target =
+      list.find((p) => p.id === pipelineId) ??
+      list.find((p) => /sales/i.test(p.name)) ??
+      list.slice().sort((a, b) => (b.stages?.length ?? 0) - (a.stages?.length ?? 0))[0] ?? null;
+    if (!target) return { ...base, configured: true, error: "no GHL pipeline found" };
+    pipelineId = target.id;
+    pipelineName = target.name ?? null;
+    stageName = new Map((target.stages ?? []).map((s) => [s.id, s.name]));
+  } catch (e) {
+    return { ...base, configured: true, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  const open = emptyTally();
+  let openTotal = 0;
+  try {
+    for (let page = 1; page <= 10; page++) {
+      const body = await ghlFetch(`/opportunities/search?location_id=${locationId}&pipeline_id=${pipelineId}&status=open&limit=100&page=${page}`);
+      const opps = (body.opportunities as Array<Record<string, unknown>>) ?? [];
+      if (!opps.length) break;
+      for (const o of opps) {
+        const sid = (o.pipelineStageId as string) ?? (o.stageId as string) ?? "";
+        const cls = classifyStage(stageName.get(sid) ?? "");
+        open[cls].count += 1;
+        open[cls].value += oppVal(o);
+        openTotal += 1;
+      }
+      if (opps.length < 100) break;
+    }
+    const [won, lost, abandoned] = await Promise.all([
+      countStatus(locationId, pipelineId, "won"),
+      countStatus(locationId, pipelineId, "lost"),
+      countStatus(locationId, pipelineId, "abandoned"),
+    ]);
+
+    for (const k of Object.keys(open) as StageClass[]) open[k].value = Math.round(open[k].value);
+    const engaged_count = open.engaged.count + open.won.count;
+    const unengaged_count = open.inbound.count;
+    const dead_open_count = open.dead.count;
+    const decided = won.count + lost.count + abandoned.count;
+    return {
+      configured: true, pipeline_name: pipelineName, open, open_total: openTotal,
+      won, lost, abandoned,
+      engaged_count, unengaged_count, dead_open_count,
+      engaged_share: engaged_count + unengaged_count > 0 ? engaged_count / (engaged_count + unengaged_count) : null,
+      win_rate: decided > 0 ? won.count / decided : null,
+      avg_won_value: won.count > 0 ? Math.round(won.value / won.count) : null,
+    };
+  } catch (e) {
+    return { ...base, configured: true, pipeline_name: pipelineName, error: e instanceof Error ? e.message : String(e) };
+  }
+}

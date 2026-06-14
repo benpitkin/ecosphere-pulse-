@@ -79,6 +79,30 @@ export default async function InstallsPage() {
   const unassigned = data.jobs.filter((j) => /draft/i.test(j.status || "")).sort(byDate);
   const other = data.jobs.filter((j) => !/confirm|draft/i.test(j.status || "")).sort(byDate);
 
+  // Monthly load vs crew capacity (~13 installs/mo = 3/week, from the cash model).
+  // Groups dated jobs by calendar month over the next 6 months so over/under-booked
+  // months are obvious at a glance — the read behind hiring/marketing timing.
+  const CAPACITY = 13;
+  const now = new Date();
+  const horizon = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    return {
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      label: d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
+    };
+  });
+  const load = new Map<string, { count: number; value: number }>();
+  for (const j of data.jobs) {
+    if (!j.install_date) continue;
+    const key = j.install_date.slice(0, 7);
+    const cur = load.get(key) ?? { count: 0, value: 0 };
+    cur.count += 1;
+    cur.value += j.value ?? 0;
+    load.set(key, cur);
+  }
+  const loadRows = horizon.map((h) => ({ ...h, ...(load.get(h.key) ?? { count: 0, value: 0 }) }));
+  const anyLoad = loadRows.some((r) => r.count > 0);
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8">
       <h1 className="text-2xl font-bold tracking-tight">Bookings &amp; installs</h1>
@@ -107,6 +131,46 @@ export default async function InstallsPage() {
               <div className="mt-2 text-3xl font-bold">{fmtDate(data.next_date)}</div>
             </Card>
           </div>
+
+          {anyLoad ? (
+            <Card className="mb-6 p-5">
+              <div className="mb-1 flex items-center justify-between">
+                <h2 className="text-base font-semibold">Install load vs capacity</h2>
+                <span className="text-xs text-muted-foreground">ceiling ~{CAPACITY}/mo</span>
+              </div>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Booked installs per month against your ~{CAPACITY}/month crew ceiling. Red = over capacity (needs a subbie or the extra installer); full bars = well utilised; light = spare capacity to sell into.
+              </p>
+              <div className="space-y-2.5">
+                {loadRows.map((r) => {
+                  const over = r.count > CAPACITY;
+                  const tone =
+                    r.count === 0 ? "bg-slate-200"
+                    : over ? "bg-red-500"
+                    : r.count >= CAPACITY * 0.7 ? "bg-emerald-500"
+                    : "bg-sky-400";
+                  const pct = Math.min(r.count / CAPACITY, 1) * 100;
+                  return (
+                    <div key={r.key} className="flex items-center gap-3">
+                      <div className="w-14 shrink-0 text-sm font-medium">{r.label}</div>
+                      <div
+                        className="relative h-6 flex-1 rounded bg-[hsl(210_40%_96%)]"
+                        role="img"
+                        aria-label={`${r.label}: ${r.count} of ${CAPACITY} installs booked${over ? " — over capacity" : ""}`}
+                      >
+                        <div className={`absolute inset-y-0 left-0 rounded ${tone}`} style={{ width: `${Math.max(pct, r.count > 0 ? 4 : 0)}%` }} />
+                        {over ? <div className="absolute inset-y-0 right-1 flex items-center text-xs font-bold text-red-600">over</div> : null}
+                      </div>
+                      <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
+                        <span className={`font-semibold ${over ? "text-red-600" : "text-foreground"}`}>{r.count}</span>/{CAPACITY}
+                        {r.value > 0 ? <span className="ml-1">· {gbp(r.value)}</span> : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          ) : null}
 
           <Card className="mb-6 p-5">
             <div className="text-sm font-medium text-muted-foreground">Cash still to come from these jobs</div>

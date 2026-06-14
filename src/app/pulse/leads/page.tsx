@@ -111,6 +111,11 @@ export default async function LeadsPage() {
             </ul>
           </Card>
 
+          {lq.truncated_open ? (
+            <p className="mb-2 text-xs font-medium text-amber-700">
+              ⚠ Showing the first 1,000 open opportunities — counts are a floor, not the full total.
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">
             Engaged = reached &ldquo;Contacted – Engaged&rdquo; or beyond (survey, proposal, accepted). Inbound = new enquiry / contact-attempt / no-contact. Win rate is all-time won vs lost+abandoned in this pipeline. Live from GHL on each load.
           </p>

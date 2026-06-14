@@ -294,6 +294,7 @@ export interface LeadQuality {
   pipeline_name: string | null;
   open: ClassTally;            // current open pipeline split by lifecycle class
   open_total: number;
+  truncated_open: boolean;     // true if open opps exceeded the page cap (count is a floor)
   won: { count: number; value: number };       // all-time decided outcomes
   lost: { count: number; value: number };
   abandoned: { count: number; value: number };
@@ -325,7 +326,7 @@ async function countStatus(locationId: string, pipelineId: string, status: strin
  *  the sales pipeline (GHL_SALES_PIPELINE_ID, else a name match, else the largest). */
 export async function fetchLeadQuality(): Promise<LeadQuality> {
   const base: LeadQuality = {
-    configured: false, pipeline_name: null, open: emptyTally(), open_total: 0,
+    configured: false, pipeline_name: null, open: emptyTally(), open_total: 0, truncated_open: false,
     won: { count: 0, value: 0 }, lost: { count: 0, value: 0 }, abandoned: { count: 0, value: 0 },
     engaged_count: 0, unengaged_count: 0, dead_open_count: 0,
     engaged_share: null, win_rate: null, avg_won_value: null,
@@ -354,6 +355,7 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
 
   const open = emptyTally();
   let openTotal = 0;
+  let truncatedOpen = false;
   try {
     for (let page = 1; page <= 10; page++) {
       const body = await ghlFetch(`/opportunities/search?location_id=${locationId}&pipeline_id=${pipelineId}&status=open&limit=100&page=${page}`);
@@ -367,12 +369,23 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
         openTotal += 1;
       }
       if (opps.length < 100) break;
+      if (page === 10) truncatedOpen = true; // hit the page cap with a full page — more exist
     }
-    const [won, lost, abandoned] = await Promise.all([
+
+    // Outcome counts are secondary; don't let one failing GHL call discard the open
+    // composition (the primary value). If any fails, keep the rest and null win_rate
+    // (an incomplete denominator would overstate it) rather than show a wrong number.
+    const [wonR, lostR, abdR] = await Promise.allSettled([
       countStatus(locationId, pipelineId, "won"),
       countStatus(locationId, pipelineId, "lost"),
       countStatus(locationId, pipelineId, "abandoned"),
     ]);
+    const zero = { count: 0, value: 0 };
+    const won = wonR.status === "fulfilled" ? wonR.value : zero;
+    const lost = lostR.status === "fulfilled" ? lostR.value : zero;
+    const abandoned = abdR.status === "fulfilled" ? abdR.value : zero;
+    const outcomesComplete =
+      wonR.status === "fulfilled" && lostR.status === "fulfilled" && abdR.status === "fulfilled";
 
     for (const k of Object.keys(open) as StageClass[]) open[k].value = Math.round(open[k].value);
     const engaged_count = open.engaged.count + open.won.count;
@@ -380,11 +393,11 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
     const dead_open_count = open.dead.count;
     const decided = won.count + lost.count + abandoned.count;
     return {
-      configured: true, pipeline_name: pipelineName, open, open_total: openTotal,
+      configured: true, pipeline_name: pipelineName, open, open_total: openTotal, truncated_open: truncatedOpen,
       won, lost, abandoned,
       engaged_count, unengaged_count, dead_open_count,
       engaged_share: engaged_count + unengaged_count > 0 ? engaged_count / (engaged_count + unengaged_count) : null,
-      win_rate: decided > 0 ? won.count / decided : null,
+      win_rate: outcomesComplete && decided > 0 ? won.count / decided : null,
       avg_won_value: won.count > 0 ? Math.round(won.value / won.count) : null,
     };
   } catch (e) {

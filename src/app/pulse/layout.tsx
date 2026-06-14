@@ -22,6 +22,7 @@ export default function PulseLayout({ children }: { children: React.ReactNode })
             <NavLink href="/pulse/focus" label="This week" />
             <NavLink href="/pulse/forecast" label="Forecast" />
             <NavLink href="/pulse/installs" label="Installs" />
+            <NavLink href="/pulse/leads" label="Leads" />
             <NavLink href="/pulse/crew" label="Crew" />
             <NavLink href="/pulse/liabilities" label="Owed" />
             <NavLink href="/pulse/advice" label="Advice" />

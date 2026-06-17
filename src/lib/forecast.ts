@@ -33,6 +33,7 @@ export interface ForecastOpts {
   hire?: boolean;       // hire an installer from Sep-26 (+£2.6k/mo, +1 install/wk)
   committed?: CommittedJob[]; // override the committed-job list (e.g. live Dispatch installs)
   overrides?: ForecastOverrides;
+  now?: Date; // override "today" (the horizon start) — for deterministic tests; defaults to new Date()
 }
 
 // Per-month line-item breakdown behind the inflows/outflows totals (for the waterfall view).
@@ -121,7 +122,7 @@ const DEFAULT_COMMITTED: CommittedJob[] = [
 const onFromSep26 = (year: number, mo: number) => year > 2026 || (year === 2026 && mo >= 8);
 
 export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): Forecast {
-  const now = new Date();
+  const now = opts.now ?? new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const horizon = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(start.getFullYear(), start.getMonth() + i, 1);

@@ -283,6 +283,32 @@ export function classifyStage(name: string): StageClass {
   return "inbound"; // unknown early stage → treat as inbound (conservative)
 }
 
+/** Tidy a GHL opportunity `source` string for display + grouping (collapse
+ *  whitespace; empty → "Unknown"). Group on the lowercased result so casing
+ *  variants like "Direct approach"/"Direct Approach" don't split. */
+export function normalizeSource(raw: unknown): string {
+  const s = (typeof raw === "string" ? raw : "").trim().replace(/\s+/g, " ");
+  if (!s) return "Unknown";
+  // Raw tracking URLs (e.g. portal.reonic.de/resolve?...) collapse to their host
+  // so every unique query string doesn't become its own one-off row.
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      return new URL(s).hostname.replace(/^www\./, "");
+    } catch {
+      /* not a parseable URL — fall through */
+    }
+  }
+  return s;
+}
+
+export interface SourceStat {
+  source: string;   // display label
+  total: number;
+  engaged: number;  // engaged + won-in-progress
+  inbound: number;  // never engaged
+  dead: number;     // dead but still open
+}
+
 type ClassTally = Record<StageClass, { count: number; value: number }>;
 const emptyTally = (): ClassTally => ({
   inbound: { count: 0, value: 0 }, engaged: { count: 0, value: 0 }, won: { count: 0, value: 0 },
@@ -304,6 +330,7 @@ export interface LeadQuality {
   engaged_share: number | null; // engaged / (engaged + inbound) of the live pipeline
   win_rate: number | null;      // won / (won + lost + abandoned), all-time
   avg_won_value: number | null;
+  by_source: SourceStat[];      // open pipeline split by lead source (Meta etc.), busiest first
   error?: string;
 }
 
@@ -329,7 +356,7 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
     configured: false, pipeline_name: null, open: emptyTally(), open_total: 0, truncated_open: false,
     won: { count: 0, value: 0 }, lost: { count: 0, value: 0 }, abandoned: { count: 0, value: 0 },
     engaged_count: 0, unengaged_count: 0, dead_open_count: 0,
-    engaged_share: null, win_rate: null, avg_won_value: null,
+    engaged_share: null, win_rate: null, avg_won_value: null, by_source: [],
   };
   const apiKey = process.env.GHL_API_KEY;
   const locationId = process.env.GHL_LOCATION_ID;
@@ -354,6 +381,7 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
   }
 
   const open = emptyTally();
+  const sourceMap = new Map<string, SourceStat>();
   let openTotal = 0;
   let truncatedOpen = false;
   try {
@@ -367,6 +395,15 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
         open[cls].count += 1;
         open[cls].value += oppVal(o);
         openTotal += 1;
+        // Per-source breakdown (Meta etc.), grouped case-insensitively.
+        const disp = normalizeSource(o.source);
+        const skey = disp.toLowerCase();
+        let st = sourceMap.get(skey);
+        if (!st) { st = { source: disp, total: 0, engaged: 0, inbound: 0, dead: 0 }; sourceMap.set(skey, st); }
+        st.total += 1;
+        if (cls === "engaged" || cls === "won") st.engaged += 1;
+        else if (cls === "inbound") st.inbound += 1;
+        else if (cls === "dead") st.dead += 1;
       }
       if (opps.length < 100) break;
       if (page === 10) truncatedOpen = true; // hit the page cap with a full page — more exist
@@ -399,6 +436,7 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
       engaged_share: engaged_count + unengaged_count > 0 ? engaged_count / (engaged_count + unengaged_count) : null,
       win_rate: outcomesComplete && decided > 0 ? won.count / decided : null,
       avg_won_value: won.count > 0 ? Math.round(won.value / won.count) : null,
+      by_source: [...sourceMap.values()].sort((a, b) => b.total - a.total),
     };
   } catch (e) {
     return { ...base, configured: true, pipeline_name: pipelineName, error: e instanceof Error ? e.message : String(e) };

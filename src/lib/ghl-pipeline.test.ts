@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyStage } from "@/lib/ghl-pipeline";
+import { classifyStage, normalizeSource } from "@/lib/ghl-pipeline";
 
 describe("classifyStage — lifecycle classification (real EcoSphere stage names)", () => {
   const cases: [string, string][] = [
@@ -38,5 +38,29 @@ describe("classifyStage — lifecycle classification (real EcoSphere stage names
 
   it("does not misread 'Contact Attempted' as engaged via 'contacted'", () => {
     expect(classifyStage("Contact Attempted")).toBe("inbound");
+  });
+});
+
+describe("normalizeSource", () => {
+  it("trims and collapses internal whitespace", () => {
+    expect(normalizeSource("  Direct   approach ")).toBe("Direct approach");
+  });
+  it("falls back to Unknown for empty / non-string", () => {
+    expect(normalizeSource("")).toBe("Unknown");
+    expect(normalizeSource("   ")).toBe("Unknown");
+    expect(normalizeSource(null)).toBe("Unknown");
+    expect(normalizeSource(undefined)).toBe("Unknown");
+    expect(normalizeSource(42)).toBe("Unknown");
+  });
+  it("groups casing variants under one key (lowercased)", () => {
+    expect(normalizeSource("Direct approach").toLowerCase()).toBe(normalizeSource("Direct Approach").toLowerCase());
+  });
+  it("preserves a normal source label", () => {
+    expect(normalizeSource("Facebook advertising")).toBe("Facebook advertising");
+  });
+  it("collapses tracking URLs to their host (so query strings don't each split)", () => {
+    expect(normalizeSource("https://portal.reonic.de/resolve?type=H360Request&id=abc")).toBe("portal.reonic.de");
+    expect(normalizeSource("https://www.example.com/x")).toBe("example.com");
+    expect(normalizeSource("not a url, just text")).toBe("not a url, just text");
   });
 });

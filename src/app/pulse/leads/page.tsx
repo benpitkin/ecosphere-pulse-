@@ -24,6 +24,27 @@ export default async function LeadsPage() {
     { label: "Post-sale / other", n: other, cls: "bg-slate-300" },
   ].filter((s) => s.n > 0);
 
+  // Top lead sources + an "Other" rollup so the long tail (one-off referral
+  // links etc.) doesn't bloat the table. by_source is already sorted by volume.
+  const TOP_SOURCES = 8;
+  const topSources = lq.by_source.slice(0, TOP_SOURCES);
+  const restSources = lq.by_source.slice(TOP_SOURCES);
+  const sourceRows = restSources.length
+    ? [
+        ...topSources,
+        restSources.reduce(
+          (a, s) => ({
+            source: `Other (${restSources.length} sources)`,
+            total: a.total + s.total,
+            engaged: a.engaged + s.engaged,
+            inbound: a.inbound + s.inbound,
+            dead: a.dead + s.dead,
+          }),
+          { source: "", total: 0, engaged: 0, inbound: 0, dead: 0 },
+        ),
+      ]
+    : topSources;
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8">
       <h1 className="text-2xl font-bold tracking-tight">Leads &amp; pipeline quality</h1>
@@ -110,6 +131,49 @@ export default async function LeadsPage() {
               </li>
             </ul>
           </Card>
+
+          {/* By source — which channels bring genuinely-engaged leads */}
+          {lq.by_source.length > 0 ? (
+            <Card className="mb-6 p-5">
+              <h2 className="mb-1 text-base font-semibold">Where your real pipeline comes from</h2>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Open opportunities by lead source, and what share of each source&apos;s leads actually engaged. A high-volume / low-engaged source (e.g. paid social) is buying form-fills, not customers.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-muted-foreground">
+                      <th className="py-1 pr-3 font-medium">Source</th>
+                      <th className="py-1 pr-3 text-right font-medium">Leads</th>
+                      <th className="py-1 pr-3 text-right font-medium">Engaged</th>
+                      <th className="py-1 pr-3 text-right font-medium">Never engaged</th>
+                      <th className="py-1 pr-3 text-right font-medium">Dead</th>
+                      <th className="py-1 text-right font-medium">Engaged %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sourceRows.map((s) => {
+                      const rate = pct(s.engaged, s.total);
+                      const tone = rate >= 50 ? "text-emerald-600" : rate >= 25 ? "text-amber-600" : "text-red-600";
+                      return (
+                        <tr key={s.source} className="border-b border-border">
+                          <td className="py-1.5 pr-3 font-medium">{s.source}</td>
+                          <td className="py-1.5 pr-3 text-right">{s.total}</td>
+                          <td className="py-1.5 pr-3 text-right text-emerald-600">{s.engaged}</td>
+                          <td className="py-1.5 pr-3 text-right text-sky-600">{s.inbound}</td>
+                          <td className="py-1.5 pr-3 text-right text-red-600">{s.dead}</td>
+                          <td className={`py-1.5 text-right font-semibold ${tone}`}>{rate}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Engaged % = engaged ÷ all leads from that source (includes the ones that went dead). It&apos;s the truest read on whether a channel sends real prospects — the input to where your next marketing £ should go.
+              </p>
+            </Card>
+          ) : null}
 
           {lq.truncated_open ? (
             <p className="mb-2 text-xs font-medium text-amber-700">

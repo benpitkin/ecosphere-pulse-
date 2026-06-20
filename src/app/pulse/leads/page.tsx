@@ -39,8 +39,9 @@ export default async function LeadsPage() {
             engaged: a.engaged + s.engaged,
             inbound: a.inbound + s.inbound,
             dead: a.dead + s.dead,
+            won: a.won + s.won,
           }),
-          { source: "", total: 0, engaged: 0, inbound: 0, dead: 0 },
+          { source: "", total: 0, engaged: 0, inbound: 0, dead: 0, won: 0 },
         ),
       ]
     : topSources;
@@ -148,7 +149,8 @@ export default async function LeadsPage() {
                       <th className="py-1 pr-3 text-right font-medium">Engaged</th>
                       <th className="py-1 pr-3 text-right font-medium">Never engaged</th>
                       <th className="py-1 pr-3 text-right font-medium">Dead</th>
-                      <th className="py-1 text-right font-medium">Engaged %</th>
+                      <th className="py-1 pr-3 text-right font-medium">Engaged %</th>
+                      <th className="py-1 text-right font-medium">Won (all-time)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -162,7 +164,8 @@ export default async function LeadsPage() {
                           <td className="py-1.5 pr-3 text-right text-emerald-600">{s.engaged}</td>
                           <td className="py-1.5 pr-3 text-right text-sky-600">{s.inbound}</td>
                           <td className="py-1.5 pr-3 text-right text-red-600">{s.dead}</td>
-                          <td className={`py-1.5 text-right font-semibold ${tone}`}>{rate}%</td>
+                          <td className={`py-1.5 pr-3 text-right font-semibold ${tone}`}>{rate}%</td>
+                          <td className="py-1.5 text-right">{s.won > 0 ? s.won : "—"}</td>
                         </tr>
                       );
                     })}
@@ -170,7 +173,7 @@ export default async function LeadsPage() {
                 </table>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Engaged % = engaged ÷ all leads from that source (includes the ones that went dead). It&apos;s the truest read on whether a channel sends real prospects — the input to where your next marketing £ should go.
+                Engaged % = engaged ÷ all leads from that source (includes the ones that went dead) — the truest read on whether a channel sends real prospects. <span className="font-medium">Won (all-time)</span> is closed deals ever attributed to that source (a wider time window than the currently-open leads), so read it as &ldquo;has this channel ever converted&rdquo;, not a rate. Together: where your next marketing £ should go.
               </p>
             </Card>
           ) : null}

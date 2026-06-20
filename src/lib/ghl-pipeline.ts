@@ -303,10 +303,11 @@ export function normalizeSource(raw: unknown): string {
 
 export interface SourceStat {
   source: string;   // display label
-  total: number;
-  engaged: number;  // engaged + won-in-progress
-  inbound: number;  // never engaged
+  total: number;    // open opps from this source
+  engaged: number;  // engaged + won-in-progress (of the open)
+  inbound: number;  // never engaged (of the open)
   dead: number;     // dead but still open
+  won: number;      // all-time WON deals from this source (did the channel ever convert?)
 }
 
 type ClassTally = Record<StageClass, { count: number; value: number }>;
@@ -336,16 +337,26 @@ export interface LeadQuality {
 
 const oppVal = (o: Record<string, unknown>) => (typeof o.monetaryValue === "number" ? (o.monetaryValue as number) : 0);
 
-async function countStatus(locationId: string, pipelineId: string, status: string): Promise<{ count: number; value: number }> {
+async function countStatus(
+  locationId: string,
+  pipelineId: string,
+  status: string,
+): Promise<{ count: number; value: number; bySource: Map<string, number> }> {
   let count = 0, value = 0;
+  const bySource = new Map<string, number>(); // key = normalized-lowercase source
   for (let page = 1; page <= 10; page++) {
     const body = await ghlFetch(`/opportunities/search?location_id=${locationId}&pipeline_id=${pipelineId}&status=${status}&limit=100&page=${page}`);
     const opps = (body.opportunities as Array<Record<string, unknown>>) ?? [];
     if (!opps.length) break;
-    for (const o of opps) { count += 1; value += oppVal(o); }
+    for (const o of opps) {
+      count += 1;
+      value += oppVal(o);
+      const k = normalizeSource(o.source).toLowerCase();
+      bySource.set(k, (bySource.get(k) ?? 0) + 1);
+    }
     if (opps.length < 100) break;
   }
-  return { count, value: Math.round(value) };
+  return { count, value: Math.round(value), bySource };
 }
 
 /** Pipeline reality: how much of the "open" pipeline is genuinely engaged vs
@@ -399,7 +410,7 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
         const disp = normalizeSource(o.source);
         const skey = disp.toLowerCase();
         let st = sourceMap.get(skey);
-        if (!st) { st = { source: disp, total: 0, engaged: 0, inbound: 0, dead: 0 }; sourceMap.set(skey, st); }
+        if (!st) { st = { source: disp, total: 0, engaged: 0, inbound: 0, dead: 0, won: 0 }; sourceMap.set(skey, st); }
         st.total += 1;
         if (cls === "engaged" || cls === "won") st.engaged += 1;
         else if (cls === "inbound") st.inbound += 1;
@@ -417,7 +428,7 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
       countStatus(locationId, pipelineId, "lost"),
       countStatus(locationId, pipelineId, "abandoned"),
     ]);
-    const zero = { count: 0, value: 0 };
+    const zero = { count: 0, value: 0, bySource: new Map<string, number>() };
     const won = wonR.status === "fulfilled" ? wonR.value : zero;
     const lost = lostR.status === "fulfilled" ? lostR.value : zero;
     const abandoned = abdR.status === "fulfilled" ? abdR.value : zero;
@@ -429,6 +440,11 @@ export async function fetchLeadQuality(): Promise<LeadQuality> {
     const unengaged_count = open.inbound.count;
     const dead_open_count = open.dead.count;
     const decided = won.count + lost.count + abandoned.count;
+    // Attach all-time won counts to the open-pipeline sources (did the channel convert?).
+    for (const [skey, n] of won.bySource) {
+      const st = sourceMap.get(skey);
+      if (st) st.won = n;
+    }
     return {
       configured: true, pipeline_name: pipelineName, open, open_total: openTotal, truncated_open: truncatedOpen,
       won, lost, abandoned,

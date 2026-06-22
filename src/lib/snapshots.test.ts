@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summarizeChange, type MetricSnapshot } from "@/lib/snapshots";
+import { summarizeChange, cashStaleDays, type MetricSnapshot } from "@/lib/snapshots";
 
 const snap = (date: string, o: Partial<MetricSnapshot> = {}): MetricSnapshot => ({
   date,
@@ -81,5 +81,45 @@ describe("summarizeChange", () => {
     ]);
     expect(c).not.toBeNull();
     expect(c!.lines).toHaveLength(0);
+  });
+});
+
+describe("cashStaleDays", () => {
+  it("returns null with no history or null latest cash", () => {
+    expect(cashStaleDays([])).toBeNull();
+    expect(cashStaleDays([snap("2026-06-20", { cash: null })])).toBeNull();
+  });
+
+  it("counts the days the latest cash value has been unchanged", () => {
+    const days = cashStaleDays([
+      snap("2026-06-13", { cash: 49668.76 }),
+      snap("2026-06-16", { cash: 49668.76 }),
+      snap("2026-06-20", { cash: 49668.76 }),
+    ]);
+    expect(days).toBe(7); // 13th → 20th
+  });
+
+  it("returns 0 when cash just changed", () => {
+    expect(cashStaleDays([
+      snap("2026-06-18", { cash: 40000 }),
+      snap("2026-06-19", { cash: 40000 }),
+      snap("2026-06-20", { cash: 45000 }), // moved on the latest day
+    ])).toBe(0);
+  });
+
+  it("stops the run at a different value (only counts the unbroken tail)", () => {
+    expect(cashStaleDays([
+      snap("2026-06-10", { cash: 50000 }),
+      snap("2026-06-18", { cash: 40000 }),
+      snap("2026-06-20", { cash: 40000 }),
+    ])).toBe(2); // 18th → 20th, not back to the 10th
+  });
+
+  it("breaks the run on a null cash entry", () => {
+    expect(cashStaleDays([
+      snap("2026-06-18", { cash: 40000 }),
+      snap("2026-06-19", { cash: null }),
+      snap("2026-06-20", { cash: 40000 }),
+    ])).toBe(0); // only the latest day counts (prior is null)
   });
 });

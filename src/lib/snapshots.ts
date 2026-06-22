@@ -128,6 +128,27 @@ export function summarizeChange(history: MetricSnapshot[], window = 7): Snapshot
   return { sinceDate: baseline.date, days, lines };
 }
 
+/**
+ * How many days the latest `cash` value has been unchanged. The Xero Balance
+ * Sheet's bank figure only moves when transactions are reconciled, so a long
+ * flat run usually means the bank reconciliation is behind — i.e. the headline
+ * "cash" is the last-reconciled balance, not the true current one. Returns null
+ * when there's no history or cash is null (nothing to assess).
+ */
+export function cashStaleDays(history: MetricSnapshot[]): number | null {
+  if (!history.length) return null;
+  const latest = history[history.length - 1];
+  if (typeof latest.cash !== "number") return null;
+  const v = latest.cash;
+  let oldestSame = latest;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const s = history[i];
+    if (typeof s.cash === "number" && s.cash === v) oldestSame = s;
+    else break;
+  }
+  return Math.round((new Date(latest.date).getTime() - new Date(oldestSame.date).getTime()) / 86_400_000);
+}
+
 /** Daily snapshots over the last `days` (oldest first), for trends/sparklines. */
 export async function getSnapshots(days = 35): Promise<MetricSnapshot[]> {
   let admin;

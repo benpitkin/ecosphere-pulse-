@@ -9,7 +9,7 @@ import { buildPulse } from "@/lib/pulse";
 import { buildForecast, forecastInputs } from "@/lib/forecast";
 import { getCommittedJobs, fetchScheduledInstalls } from "@/lib/dispatch-jobs";
 import { buildInsights, type InsightTone } from "@/lib/insights";
-import { getSnapshots, summarizeChange, type MetricSnapshot } from "@/lib/snapshots";
+import { getSnapshots, summarizeChange, cashStaleDays, type MetricSnapshot } from "@/lib/snapshots";
 
 export const dynamic = "force-dynamic";
 
@@ -33,10 +33,11 @@ function Spark({ series, color }: { series: number[]; color: string }) {
   );
 }
 
-function Tile({ label, value, sub, icon, tone = "default", series, deltaText, deltaTone, sparkColor }: {
+function Tile({ label, value, sub, icon, tone = "default", series, deltaText, deltaTone, sparkColor, note }: {
   label: string; value: string; sub?: string; icon: React.ReactNode;
   tone?: "default" | "good" | "warn" | "bad";
   series?: number[]; deltaText?: string; deltaTone?: "good" | "bad" | "neutral"; sparkColor?: string;
+  note?: string; // amber freshness/caveat line (e.g. cash unchanged for N days)
 }) {
   const accent =
     tone === "good" ? "bg-emerald-400" : tone === "warn" ? "bg-amber-400" : tone === "bad" ? "bg-red-400" : "bg-transparent";
@@ -57,6 +58,7 @@ function Tile({ label, value, sub, icon, tone = "default", series, deltaText, de
       </div>
       {sub ? <div className="mt-1 text-xs text-muted-foreground">{sub}</div> : null}
       {deltaText ? <div className={`mt-1 text-xs font-medium ${deltaColor}`}>{deltaText}</div> : null}
+      {note ? <div className="mt-1 text-xs font-medium text-amber-600">{note}</div> : null}
     </Card>
   );
 }
@@ -109,6 +111,13 @@ export default async function PulsePage() {
   const change = summarizeChange(history);
   const fmtSince = (iso: string) =>
     new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
+  // Cash from Xero only moves on bank reconciliation; a long flat run means the
+  // headline figure is the last-reconciled balance, not today's. Flag at 4+ days.
+  const cashStale = m.cash != null ? cashStaleDays(history) : null;
+  const cashNote = cashStale != null && cashStale >= 4
+    ? `⏳ unchanged ${cashStale}d — last reconciled Xero balance`
+    : undefined;
 
   // One-line health verdict from the ranked actions (works without history).
   const concerns = pulse.actions.filter((a) => a.severity !== "info");
@@ -224,7 +233,7 @@ export default async function PulsePage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Tile label="Cash on hand" value={gbp(m.cash)}
           sub={m.available_liquidity != null ? `${gbp(m.available_liquidity)} incl. facility headroom` : undefined}
-          icon={<Banknote size={18} />} {...trendFor(history, "cash", "up", gbp)} />
+          icon={<Banknote size={18} />} note={cashNote} {...trendFor(history, "cash", "up", gbp)} />
         <Tile label="Runway" value={m.runway_months != null ? `${m.runway_months} mo` : "—"}
           sub={`at ${gbp(m.overheads_used)}/mo overheads${m.runway_is_estimate ? " · est." : ""}`}
           icon={<Gauge size={18} />} tone={runwayTone}

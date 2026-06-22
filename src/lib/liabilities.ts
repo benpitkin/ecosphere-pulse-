@@ -30,10 +30,14 @@ const FC_LOAN_BALANCE = 55588;      // origination; £2,761.78/mo to Jun-2028
 const COT_REMNANT = 0;               // fully cleared Jun-2026 (£52k refinanced + remnant paid from cash)
 const CORP_TAX = 13000;             // accountant estimate, due Nov-26
 
-export async function getLiabilities(): Promise<Liabilities> {
-  const { lines, error } = await getBalanceSheetIndex();
-  if (error) return { configured: false, items: [], lenderTotal: 0, hmrcTotal: 0, error };
-
+/** Pure: map balance-sheet lines (account name → value) + the off-Xero items
+ *  into the grouped liability list + lender/HMRC totals. Liability values come
+ *  back negative on the balance sheet, so `owed()` takes the magnitude. */
+export function buildLiabilities(lines: Record<string, number>): {
+  items: LiabilityItem[];
+  lenderTotal: number;
+  hmrcTotal: number;
+} {
   const val = (k: string) => Number(lines[k] ?? 0);
   const owed = (k: string) => Math.abs(val(k)); // liability magnitude
   const items: LiabilityItem[] = [];
@@ -62,5 +66,11 @@ export async function getLiabilities(): Promise<Liabilities> {
   const dla = val("directors' loan account");
   if (dla) items.push({ label: "Director's loan account (Xero)", amount: Math.abs(dla), group: "note", note: "Reflects the pre-refinance Capital on Tap; reduces once your bookkeeper posts the £52k settlement" });
 
-  return { configured: true, items, lenderTotal, hmrcTotal };
+  return { items, lenderTotal, hmrcTotal };
+}
+
+export async function getLiabilities(): Promise<Liabilities> {
+  const { lines, error } = await getBalanceSheetIndex();
+  if (error) return { configured: false, items: [], lenderTotal: 0, hmrcTotal: 0, error };
+  return { configured: true, ...buildLiabilities(lines) };
 }

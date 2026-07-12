@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { gbp } from "@/lib/utils";
-import { buildForecast, forecastInputs, MODEL_DEFAULTS, type CommittedJob } from "@/lib/forecast";
+import { buildForecast, forecastInputs, MODEL_DEFAULTS, AGENCY_DEFAULTS, type CommittedJob } from "@/lib/forecast";
 import { CashWaterfall } from "./cash-waterfall";
 
 interface Props {
@@ -68,6 +68,14 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const [mktScale, setMktScale] = useState(1);
   const [hire, setHire] = useState(false);
 
+  // Marketing-agency lever (e.g. Solar on Steroids). Off by default; editable figures
+  // seeded from the proposal defaults so the panel matches what they actually quoted.
+  const [agencyOn, setAgencyOn] = useState(false);
+  const [agRetainer, setAgRetainer] = useState(AGENCY_DEFAULTS.retainer);
+  const [agAdSpend, setAgAdSpend] = useState(AGENCY_DEFAULTS.adSpend);
+  const [agCommissionPct, setAgCommissionPct] = useState(AGENCY_DEFAULTS.commissionPct);
+  const [agDeals, setAgDeals] = useState(AGENCY_DEFAULTS.dealsPerMonth);
+
   // Editable "what-if" figures (session-only). Seeded from the model defaults; opening
   // cash from live Xero / the page override.
   const seedOpening = forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride }).openingCash;
@@ -113,20 +121,31 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
     [openingCashEdit, overheads, avgJob, cogsPct, busGrant, capacity, natasha, mcs, corpTax, accountant],
   );
 
+  const agency = useMemo(
+    () => ({
+      enabled: agencyOn,
+      retainer: agRetainer,
+      adSpend: agAdSpend,
+      commissionPct: agCommissionPct,
+      dealsPerMonth: agDeals,
+    }),
+    [agencyOn, agRetainer, agAdSpend, agCommissionPct, agDeals],
+  );
+
   // Selected scenario (base + conservative).
   const base = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { marketingScale: mktScale, hire, committed, overrides },
+      { marketingScale: mktScale, hire, committed, overrides, agency },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed, overrides],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed, overrides, agency],
   );
   const cons = useMemo(
     () => buildForecast(
       forecastInputs({ cash, receivables, overdue, openingCashOverride: openingOverride, ownerDrawings: drawings }),
-      { conservative: true, marketingScale: mktScale, hire, committed, overrides },
+      { conservative: true, marketingScale: mktScale, hire, committed, overrides, agency },
     ),
-    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed, overrides],
+    [cash, receivables, overdue, openingOverride, drawings, mktScale, hire, committed, overrides, agency],
   );
 
   const liveCash = cash != null || openingOverride != null;
@@ -165,7 +184,7 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const minIdx = baseC.indexOf(Math.min(...baseC));
 
   // ---- scenario comparison ----
-  const settingsLabel = `${gbp(drawings)} draw · ${mktScale}× mkt${hire ? " · +hire" : ""}`;
+  const settingsLabel = `${gbp(drawings)} draw · ${mktScale}× mkt${hire ? " · +hire" : ""}${agencyOn ? ` · +agency ${agDeals}/mo` : ""}`;
   const pinScenario = () =>
     setScenarios((s) => [
       ...s,
@@ -290,6 +309,34 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
             Adds installer capacity from Sep-26. It only pays for itself once demand tops your current ~13 installs/mo — try it with marketing on Push or Aggressive.
           </p>
         ) : null}
+
+        {/* Marketing-agency lever */}
+        <div className="mt-5 border-t border-border pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button onClick={() => setAgencyOn((v) => !v)}
+              className={`rounded-md border px-3 py-1.5 text-xs font-medium ${agencyOn ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:border-accent"}`}>
+              {agencyOn ? "✓ " : ""}Marketing agency (Solar on Steroids)
+            </button>
+            {agencyOn ? (
+              <span className="text-xs text-muted-foreground">
+                +{gbp(agRetainer + agAdSpend)}/mo fixed + {Math.round(agCommissionPct * 100)}% commission
+              </span>
+            ) : null}
+          </div>
+          {agencyOn ? (
+            <>
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <NumberField label="Retainer (£/mo)" value={agRetainer} onChange={setAgRetainer} step={250} hint="Ex-VAT (reclaimable)" />
+                <NumberField label="Ad spend (£/mo)" value={agAdSpend} onChange={setAgAdSpend} step={250} hint="Paid to Meta" />
+                <NumberField label="Commission (%)" value={Math.round(agCommissionPct * 100)} onChange={(n) => setAgCommissionPct(n / 100)} step={1} hint="Of generated revenue" />
+                <NumberField label="Extra installs / mo" value={agDeals} onChange={setAgDeals} step={1} hint="Steady state, ramps ~4 mo" />
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Adds {agDeals} installs/mo once ramped (0 → 50% → 80% → full over the first four months), drawing on capacity left after committed jobs — so if you&apos;re near your ~{capacity}/mo ceiling, turn on the hire too. Retainer + ad spend are charged every month; commission ({Math.round(agCommissionPct * 100)}%) only on the revenue it generates. Break-even is under one install a month.
+              </p>
+            </>
+          ) : null}
+        </div>
 
         <div className={`mt-5 rounded-lg border px-4 py-3 text-sm ${verdictClr}`}>
           <span className="font-semibold">{gbp(drawings)}/mo draw: </span>{verdict.text}{" "}

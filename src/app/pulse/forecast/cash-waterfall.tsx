@@ -45,6 +45,15 @@ const WATERFALL_GROUPS: { title: string; rows: { label: string; key: keyof Month
       { label: "Accountant", key: "accountant" },
     ],
   },
+  {
+    // Only populated when the agency lever is on; rows read "—" otherwise.
+    title: "Marketing agency",
+    rows: [
+      { label: "Agency retainer", key: "agencyRetainer" },
+      { label: "Agency ad spend", key: "agencyAdSpend" },
+      { label: "Agency commission", key: "agencyCommission" },
+    ],
+  },
 ];
 
 // Blank for £0 so the grid reads like the spreadsheet; £ otherwise.

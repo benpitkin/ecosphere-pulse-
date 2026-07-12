@@ -27,12 +27,24 @@ export interface ForecastOverrides {
   oneOffs?: { mcsRenewal?: number; corporationTax?: number; accountant?: number };
 }
 
+// Optional paid lead-gen channel (e.g. a marketing agency like Solar on Steroids).
+// Adds a fixed monthly retainer + ad spend, a commission on the revenue it generates,
+// and its own installs (ramped to steady state) that draw on spare install capacity.
+export interface AgencyChannel {
+  enabled: boolean;
+  retainer?: number;       // £/mo, ex-VAT (VAT on the retainer is reclaimable)
+  adSpend?: number;        // £/mo paid to the ad platform
+  commissionPct?: number;  // 0..1 of generated revenue (uncapped in the real deal)
+  dealsPerMonth?: number;  // steady-state EXTRA installs the channel books
+}
+
 export interface ForecastOpts {
   conservative?: boolean;
   marketingScale?: number;
   hire?: boolean;       // hire an installer from Sep-26 (+£2.6k/mo, +1 install/wk)
   committed?: CommittedJob[]; // override the committed-job list (e.g. live Dispatch installs)
   overrides?: ForecastOverrides;
+  agency?: AgencyChannel; // optional paid lead-gen overlay (off unless enabled)
   now?: Date; // override "today" (the horizon start) — for deterministic tests; defaults to new Date()
 }
 
@@ -63,6 +75,10 @@ export interface MonthBreakdown {
   mcsRenewal: number;
   corporationTax: number;
   accountant: number;
+  // agency (optional paid lead-gen channel; all zero when disabled)
+  agencyRetainer: number;
+  agencyAdSpend: number;
+  agencyCommission: number;
 }
 
 export interface ForecastMonth {
@@ -121,6 +137,19 @@ const DEFAULT_COMMITTED: CommittedJob[] = [
 // Hire / clearance trigger from Sep-26 (calendar year 2026, month index 8 = Sep).
 const onFromSep26 = (year: number, mo: number) => year > 2026 || (year === 2026 && mo >= 8);
 
+// Agency channel defaults, from the Solar on Steroids proposal: £2k/mo retainer +
+// £2.5k/mo Meta ad spend + 2% commission on generated revenue. `dealsPerMonth` is the
+// steady-state EXTRA installs assumed once campaigns are ramped (edit in the UI).
+export const AGENCY_DEFAULTS = {
+  retainer: 2000,
+  adSpend: 2500,
+  commissionPct: 0.02,
+  dealsPerMonth: 3,
+};
+// Ramp to steady state by horizon month (launch lag → full), mirroring the agency's
+// own 6-month model. Months beyond the array stay at full (1).
+const AGENCY_RAMP = [0, 0.5, 0.8, 1, 1, 1];
+
 export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): Forecast {
   const now = opts.now ?? new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -165,11 +194,29 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     committed.reduce((s, j) => (j.cashY === year && j.cashM === mo ? s + j.value : s), 0),
   );
   const capAt = (i: number) => capacity + (opts.hire && onFromSep26(horizon[i].year, horizon[i].mo) ? HIRE_CAPACITY : 0);
-  // Funnel installs = net-new beyond committed, capped by the capacity left that month.
-  const fInstalls = horizon.map((_, i) =>
-    i === 0 ? 0 : Math.min(won[i - 1], Math.max(capAt(i) - committedInstalls[i], 0)),
+
+  // Agency channel (optional). Its installs take the capacity left after committed jobs
+  // (agency leads are paid for, so they sit ahead of the organic funnel), ramping from a
+  // launch lag toward `dealsPerMonth`. Off by default → every array below is zeros and the
+  // model is identical to the pure port.
+  const ag = opts.agency;
+  const agencyOn = !!ag?.enabled;
+  const agRetainerAmt = ag?.retainer ?? AGENCY_DEFAULTS.retainer;
+  const agAdSpendAmt = ag?.adSpend ?? AGENCY_DEFAULTS.adSpend;
+  const agCommissionPct = ag?.commissionPct ?? AGENCY_DEFAULTS.commissionPct;
+  const agDealsSteady = ag?.dealsPerMonth ?? AGENCY_DEFAULTS.dealsPerMonth;
+  const agencyInstalls = horizon.map((_, i) =>
+    agencyOn ? Math.min(agDealsSteady * (AGENCY_RAMP[i] ?? 1), Math.max(capAt(i) - committedInstalls[i], 0)) : 0,
   );
-  const fRevenue = fInstalls.map((x) => x * avgJob);
+
+  // Funnel installs = net-new beyond committed AND agency, capped by the capacity left.
+  const fInstalls = horizon.map((_, i) =>
+    i === 0 ? 0 : Math.min(won[i - 1], Math.max(capAt(i) - committedInstalls[i] - agencyInstalls[i], 0)),
+  );
+  // New-win installs that drive customer cash = organic funnel + agency channel. All the
+  // deposit/balance/BUS/COGS/DNO logic below runs on this combined figure.
+  const newInstalls = horizon.map((_, i) => fInstalls[i] + agencyInstalls[i]);
+  const newRevenue = newInstalls.map((x) => x * avgJob);
 
   const months: ForecastMonth[] = [];
   let cash = opening;
@@ -182,14 +229,14 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
       if (j.cashY === year && j.cashM === mo) committedCash += j.value * 0.75;
       if (j.busY === year && j.busM === mo) committedBus += j.bus;
     }
-    const depositNext = i + 1 < 12 ? fInstalls[i + 1] * avgJob * 0.25 : 0;
-    const balanceNow = fInstalls[i] * avgJob * 0.75;
+    const depositNext = i + 1 < 12 ? newInstalls[i + 1] * avgJob * 0.25 : 0;
+    const balanceNow = newInstalls[i] * avgJob * 0.75;
     const newWinsCash = depositNext + balanceNow;
-    const busFromWins = i >= 2 ? fInstalls[i - 2] * HP_SHARE * busGrant : 0;
+    const busFromWins = i >= 2 ? newInstalls[i - 2] * HP_SHARE * busGrant : 0;
     let receivables = 0;
     if (i === 0) receivables = a.overdueReceivables;
     else if (i === 1) receivables = Math.max(a.existingReceivables - a.overdueReceivables, 0);
-    const vat = (i === 1 ? 2877 : 0) + (i >= 3 ? fRevenue[i] * 0.033 : 0);
+    const vat = (i === 1 ? 2877 : 0) + (i >= 3 ? newRevenue[i] * 0.033 : 0);
 
     const inflows = committedCash + committedBus + newWinsCash + busFromWins + receivables + vat;
 
@@ -201,9 +248,9 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     const fixed = overheadsBase + a.ownerDrawings + marketing + natashaUplift + hireCost;
 
     // OUTFLOWS — variable: COGS on installed revenue + DNO/MCS per install + card/bank fees.
-    const installedRevenue = fRevenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
+    const installedRevenue = newRevenue[i] + (committedCash > 0 ? committedCash / 0.75 : 0);
     const cogs = installedRevenue * cogsPct;
-    const dnoMcs = (fInstalls[i] + committedInstalls[i]) * DNO_MCS;
+    const dnoMcs = (newInstalls[i] + committedInstalls[i]) * DNO_MCS;
     const bankFees = inflows * BANK_FEE_PCT;
     const variable = cogs + dnoMcs + bankFees;
 
@@ -221,7 +268,14 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     const accountant = mo === 1 ? accountantAmt : 0; // Feb
     const oneOffs = mcsRenewal + corporationTax + accountant;
 
-    const outflows = fixed + variable + finance + oneOffs;
+    // Agency channel costs: fixed retainer + ad spend every month it's engaged, plus
+    // commission on the revenue it generates. Ex-VAT (retainer VAT is reclaimable).
+    const agencyRetainer = agencyOn ? agRetainerAmt : 0;
+    const agencyAdSpend = agencyOn ? agAdSpendAmt : 0;
+    const agencyCommission = agencyOn ? agencyInstalls[i] * avgJob * agCommissionPct : 0;
+    const agency = agencyRetainer + agencyAdSpend + agencyCommission;
+
+    const outflows = fixed + variable + finance + oneOffs + agency;
     const net = inflows - outflows;
     cash += net;
     months.push({
@@ -251,6 +305,9 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
         mcsRenewal: r(mcsRenewal),
         corporationTax: r(corporationTax),
         accountant: r(accountant),
+        agencyRetainer: r(agencyRetainer),
+        agencyAdSpend: r(agencyAdSpend),
+        agencyCommission: r(agencyCommission),
       },
     });
   });
@@ -267,10 +324,11 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
       closing: Math.round(closings[closings.length - 1]),
       netGeneration: Math.round(closings[closings.length - 1] - opening),
     },
-    // Display totals = funnel net-new + committed throughput (the cash engine above
-    // keeps them separate so nothing is double-counted; the chart shows total activity).
-    installs: fInstalls.map((x, i) => Math.round((x + committedInstalls[i]) * 10) / 10),
-    revenue: fRevenue.map((x, i) => Math.round(x + committedRevenue[i])),
+    // Display totals = new-win throughput (organic funnel + agency) + committed jobs (the
+    // cash engine above keeps them separate so nothing is double-counted; the chart shows
+    // total activity).
+    installs: newInstalls.map((x, i) => Math.round((x + committedInstalls[i]) * 10) / 10),
+    revenue: newRevenue.map((x, i) => Math.round(x + committedRevenue[i])),
   };
 }
 

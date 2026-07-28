@@ -26,10 +26,10 @@ describe("toCommittedJobs — BUS eligibility & timing", () => {
     expect(out.map((j) => j.bus)).toEqual([7500, 0, 0]);
   });
 
-  it("lands customer cash in the install month and BUS ~2 months later", () => {
+  it("lands customer cash and the BUS grant in the install month (~1–2 weeks after commissioning)", () => {
     const [j] = toCommittedJobs([{ value: 15000, install_date: "2026-07-15", job_type: "ashp_install" }]);
     expect([j.cashY, j.cashM]).toEqual([2026, 6]); // July = month index 6
-    expect([j.busY, j.busM]).toEqual([2026, 8]);   // +2 = September
+    expect([j.busY, j.busM]).toEqual([2026, 6]);   // grant now lands the same month
   });
 
   it("skips jobs with no value or no date", () => {

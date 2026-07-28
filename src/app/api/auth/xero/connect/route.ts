@@ -16,7 +16,11 @@ const SCOPES = [
 
 export async function GET() {
   const clientId = process.env.XERO_CLIENT_ID;
-  const redirectUri = process.env.XERO_REDIRECT_URI;
+  // Prefer the explicit env var; fall back to deriving the callback from the site URL so a
+  // missing/renamed XERO_REDIRECT_URI doesn't break the connect flow. Trailing slash stripped
+  // so it matches Xero's registered URI exactly (Xero requires a character-for-character match).
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "");
+  const redirectUri = (process.env.XERO_REDIRECT_URI || (siteUrl ? `${siteUrl}/api/auth/xero/callback` : "")).replace(/\/+$/, "");
   if (!clientId || !redirectUri) {
     return NextResponse.json(
       { error: "Xero env vars not set (XERO_CLIENT_ID, XERO_REDIRECT_URI)." },

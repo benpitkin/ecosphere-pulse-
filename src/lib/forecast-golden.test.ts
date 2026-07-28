@@ -17,28 +17,31 @@ describe("buildForecast — golden master (now=2026-06-01, default committed job
     ]);
   });
 
+  // Re-captured Aug 2026 after the BUS-timing correction (grant now lands in the install
+  // month, not ~2 months later) — this pulls grant cash forward, lifting closing cash.
   it("closing cash series", () => {
     expect(fc.months.map((m) => m.closing)).toEqual([
-      50493.9, 78475.35, 115008.96, 194595.33, 291246.29, 356568.71,
-      447211.55, 537827.71, 622587.74, 692062.01, 783374.17, 847748.53,
+      72483.15, 151538.78, 226643.89, 306070.3, 418946.18, 508408.06,
+      585772.17, 641748.17, 719567.2, 812264.65, 921253.66, 1003304.87,
     ]);
   });
 
   it("money-in series", () => {
     expect(fc.months.map((m) => m.inflows)).toEqual([
-      57747.01, 105643.21, 128293.57, 167846.31, 242107.08, 198175.91,
-      195656.18, 166399.5, 182795.06, 175189.12, 211428.34, 189715.13,
+      80247.01, 157903.7, 167760.99, 167682.63, 258708.85, 222876.05,
+      182069.03, 130954.75, 175692.83, 198951.71, 229515.78, 207802.58,
     ]);
   });
 
   it("money-out series", () => {
     expect(fc.months.map((m) => m.outflows)).toEqual([
-      52253.11, 77661.76, 91759.96, 88259.94, 145456.11, 132853.49,
-      105013.35, 75783.34, 98035.03, 105714.85, 120116.19, 125340.77,
+      52763.86, 78848.07, 92655.87, 88256.22, 145832.97, 133414.18,
+      104704.92, 74978.74, 97873.8, 106254.26, 120526.77, 125751.36,
     ]);
   });
 
   it("installs + revenue series", () => {
+    // Unchanged by the BUS-timing fix — grant timing moves cash, not job counts.
     expect(fc.installs).toEqual([3, 6.1, 7.4, 6.4, 10.7, 9.5, 8, 5.1, 7.1, 8, 9.4, 10.3]);
     expect(fc.revenue).toEqual([
       54225, 88991, 107845, 99640, 184614, 146881, 124284, 79090, 110701, 124538, 145294, 159132,
@@ -47,7 +50,7 @@ describe("buildForecast — golden master (now=2026-06-01, default committed job
 
   it("summary", () => {
     expect(fc.summary).toEqual({
-      minCash: 50494, minCashMonth: "Jun-26", closing: 847749, netGeneration: 802749,
+      minCash: 72483, minCashMonth: "Jun-26", closing: 1003305, netGeneration: 958305,
     });
   });
 });

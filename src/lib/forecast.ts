@@ -122,15 +122,16 @@ const WON_PCT = 0.22;
 
 // Committed jobs: advance+balance (75%) land in cash month; BUS in grant month.
 export type CommittedJob = { value: number; bus: number; cashY: number; cashM: number; busY: number | null; busM: number | null };
+// BUS grant lands in the install month (~1–2 weeks after commissioning), so busM = cashM.
 const DEFAULT_COMMITTED: CommittedJob[] = [
-  { value: 11866, bus: 9000, cashY: 2026, cashM: 6, busY: 2026, busM: 8 }, // Jul / Sep
-  { value: 15152, bus: 9000, cashY: 2026, cashM: 6, busY: 2026, busM: 8 },
-  { value: 18393, bus: 7500, cashY: 2026, cashM: 5, busY: 2026, busM: 7 }, // Jun / Aug
-  { value: 21996, bus: 7500, cashY: 2026, cashM: 5, busY: 2026, busM: 7 },
-  { value: 11500, bus: 9000, cashY: 2026, cashM: 7, busY: 2026, busM: 9 }, // Aug / Oct
-  { value: 12253, bus: 9000, cashY: 2026, cashM: 7, busY: 2026, busM: 9 },
-  { value: 13660, bus: 9000, cashY: 2026, cashM: 6, busY: 2026, busM: 8 }, // Jul / Sep
-  { value: 13836, bus: 7500, cashY: 2026, cashM: 5, busY: 2026, busM: 7 }, // Jun / Aug
+  { value: 11866, bus: 9000, cashY: 2026, cashM: 6, busY: 2026, busM: 6 }, // Jul
+  { value: 15152, bus: 9000, cashY: 2026, cashM: 6, busY: 2026, busM: 6 },
+  { value: 18393, bus: 7500, cashY: 2026, cashM: 5, busY: 2026, busM: 5 }, // Jun
+  { value: 21996, bus: 7500, cashY: 2026, cashM: 5, busY: 2026, busM: 5 },
+  { value: 11500, bus: 9000, cashY: 2026, cashM: 7, busY: 2026, busM: 7 }, // Aug
+  { value: 12253, bus: 9000, cashY: 2026, cashM: 7, busY: 2026, busM: 7 },
+  { value: 13660, bus: 9000, cashY: 2026, cashM: 6, busY: 2026, busM: 6 }, // Jul
+  { value: 13836, bus: 7500, cashY: 2026, cashM: 5, busY: 2026, busM: 5 }, // Jun
   { value: 34343, bus: 0, cashY: 2026, cashM: 9, busY: null, busM: null }, // Oct
 ];
 
@@ -232,7 +233,9 @@ export function buildForecast(a: ForecastAssumptions, opts: ForecastOpts = {}): 
     const depositNext = i + 1 < 12 ? newInstalls[i + 1] * avgJob * 0.25 : 0;
     const balanceNow = newInstalls[i] * avgJob * 0.75;
     const newWinsCash = depositNext + balanceNow;
-    const busFromWins = i >= 2 ? newInstalls[i - 2] * HP_SHARE * busGrant : 0;
+    // BUS grant lands within ~1–2 weeks of commissioning, so it's booked in the
+    // install month (not the old ~2-month lag). Corrected Aug 2026.
+    const busFromWins = newInstalls[i] * HP_SHARE * busGrant;
     let receivables = 0;
     if (i === 0) receivables = a.overdueReceivables;
     else if (i === 1) receivables = Math.max(a.existingReceivables - a.overdueReceivables, 0);
@@ -337,11 +340,14 @@ function r(n: number): number {
 }
 
 // Shared model defaults + input builder so the cockpit and forecast page agree.
+// openingCash / capitalOnTap are FALLBACKS used only when live Xero cash is
+// unavailable — set to the last-known real figures (Aug 2026: ~£89k Monzo cash,
+// ~£47.6k Capital on Tap headroom) so a disconnected Xero doesn't understate cash.
 export const FORECAST_DEFAULTS = {
-  openingCash: 45000,
+  openingCash: 89000,
   monthlyOverheadsBase: 8850,
   ownerDrawings: 2000,
-  capitalOnTap: 51644,
+  capitalOnTap: 47622,
 };
 
 // Default values for the editable "what-if" figures panel — mirror the model constants
@@ -390,14 +396,14 @@ export function toCommittedJobs(
     // BUS grant is heat-pump installs only — match the exact Dispatch job_type enum
     // value so a heat_loss_survey (which contains "heat") doesn't wrongly qualify.
     const bus = j.job_type === "ashp_install" ? 7500 : 0;
-    const bd = new Date(cashY, cashM + 2, 1); // ~8-week grant lag
+    // Grant lands within ~1–2 weeks of commissioning → same month as the install.
     out.push({
       value: j.value,
       bus,
       cashY,
       cashM,
-      busY: bus > 0 ? bd.getFullYear() : null,
-      busM: bus > 0 ? bd.getMonth() : null,
+      busY: bus > 0 ? cashY : null,
+      busM: bus > 0 ? cashM : null,
     });
   }
   return out;

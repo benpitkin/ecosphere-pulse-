@@ -17,8 +17,9 @@ export async function GET(req: Request) {
 
   const clientId = process.env.XERO_CLIENT_ID;
   const clientSecret = process.env.XERO_CLIENT_SECRET;
-  const redirectUri = process.env.XERO_REDIRECT_URI;
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || url.origin).replace(/\/+$/, "");
+  // Must match the redirect_uri sent by the connect route exactly (same fallback + trailing-slash strip).
+  const redirectUri = (process.env.XERO_REDIRECT_URI || `${siteUrl}/api/auth/xero/callback`).replace(/\/+$/, "");
   if (!clientId || !clientSecret || !redirectUri) {
     return NextResponse.json({ error: "Xero env vars not set." }, { status: 500 });
   }

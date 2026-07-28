@@ -82,7 +82,7 @@ export async function buildBusinessContext(): Promise<string> {
     if (freeNow.length) lines.push(`- Available to take the unassigned bookings: ${freeNow.map((mm) => mm.name).join(", ")}.`);
     void assigned;
   }
-  lines.push("\nDEBT: The Capital on Tap card (~£52k at ~44.8% APR) was REFINANCED in June 2026 onto a Funding Circle loan — £2,761.78/mo for 24 months (04-Jul-2026 to 04-Jun-2028), saving ~£17k of interest. The Capital on Tap card is now FULLY CLEARED (£52k refinanced + the ~£6.3k remnant paid off from cash in Jun-2026) — the 44.8% toxic debt is gone. Only finance facilities now: the Funding Circle loan, GC Finance £271/mo (ends Mar-27) and Amex £139/mo.");
+  lines.push("\nDEBT: In June 2026 ~£52k of Capital on Tap balance was REFINANCED onto a Funding Circle loan — £2,761.78/mo for 24 months (04-Jul-2026 to 04-Jun-2028) at ~18% APR — the only real interest-bearing debt. The Capital on Tap card is STILL in active use as interest-free working capital: ~£15–22k of spend runs through it each month (ads, materials, SaaS), earning 1% cashback, and is cleared IN FULL each month so it carries 0% interest — it is NOT a debt while cleared on time (only a missed statement triggers its ~44% APR). BUS grants land within ~1–2 weeks of commissioning. Other facilities: GC Finance £271/mo (ends Mar-27) and Amex (~£5.4k balance, cleared monthly).");
 
   lines.push("\nCURRENT PRIORITISED ADVICE:");
   for (const a of advice) lines.push(`- [${a.priority}] ${a.title} — ${a.action}`);

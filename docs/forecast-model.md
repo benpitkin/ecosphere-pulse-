@@ -17,7 +17,7 @@ assumes and produces, so the port is documented alongside it.
 | Install capacity | 13/mo (+1/week if the installer is hired, from Sep-26) |
 | COGS | 65% of customer revenue (44% materials + 21% subbie) |
 | DNO + MCS | £65 / install |
-| BUS grant | £9,000 on ~90% of jobs, lands ~2 months after install |
+| BUS grant | £9,000 on ~90% of jobs, lands within ~1–2 weeks of commissioning (booked in the install month) |
 | Cost per lead / other leads | £50 · +9/mo |
 | Proposal→won | 22% |
 | Bank/card fees | 2.27% of inflows |
@@ -36,20 +36,24 @@ Deterministic baseline pinned by `src/lib/forecast-golden.test.ts`:
 
 | Month | Money in | Money out | Closing cash |
 |---|--:|--:|--:|
-| Jun-26 | £57,747 | £52,253 | £50,494 |
-| Jul-26 | £105,643 | £77,662 | £78,475 |
-| Aug-26 | £128,294 | £91,760 | £115,009 |
-| Sep-26 | £167,846 | £88,260 | £194,595 |
-| Oct-26 | £242,107 | £145,456 | £291,246 |
-| Nov-26 | £198,176 | £132,853 | £356,569 |
-| Dec-26 | £195,656 | £105,013 | £447,212 |
-| Jan-27 | £166,400 | £75,783 | £537,828 |
-| Feb-27 | £182,795 | £98,035 | £622,588 |
-| Mar-27 | £175,189 | £105,715 | £692,062 |
-| Apr-27 | £211,428 | £120,116 | £783,374 |
-| May-27 | £189,715 | £125,341 | £847,749 |
+| Jun-26 | £80,247 | £52,764 | £72,483 |
+| Jul-26 | £157,904 | £78,848 | £151,539 |
+| Aug-26 | £167,761 | £92,656 | £226,644 |
+| Sep-26 | £167,683 | £88,256 | £306,070 |
+| Oct-26 | £258,709 | £145,833 | £418,946 |
+| Nov-26 | £222,876 | £133,414 | £508,408 |
+| Dec-26 | £182,069 | £104,705 | £585,772 |
+| Jan-27 | £130,955 | £74,979 | £641,748 |
+| Feb-27 | £175,693 | £97,874 | £719,567 |
+| Mar-27 | £198,952 | £106,254 | £812,265 |
+| Apr-27 | £229,516 | £120,527 | £921,254 |
+| May-27 | £207,803 | £125,751 | £1,003,305 |
 
-**Summary:** lowest cash £50,494 (Jun-26) · year-end £847,749 · net generated £802,749.
+**Summary:** lowest cash £72,483 (Jun-26) · year-end £1,003,305 · net generated £958,305.
+
+> Re-captured Aug 2026 after the **BUS-timing correction** — the grant now lands in the
+> install month (was ~2 months later), pulling grant cash forward and lifting every
+> closing balance.
 
 > This is the **base/stretch** case (assumes marketing scales and conversion lifts).
 > Note the known modelling caveat: with live committed Dispatch jobs, the engine

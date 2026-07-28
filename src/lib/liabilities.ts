@@ -26,8 +26,13 @@ export interface Liabilities {
 }
 
 // Not yet reconciled into Xero — entered from the loan paperwork.
-const FC_LOAN_BALANCE = 55588;      // origination; £2,761.78/mo to Jun-2028
-const COT_REMNANT = 0;               // fully cleared Jun-2026 (£52k refinanced + remnant paid from cash)
+const FC_LOAN_BALANCE = 55588;      // origination; £2,761.78/mo to Jun-2028 — reduces as payments are made (update from FC statement)
+// Capital on Tap was refinanced onto the Funding Circle loan in Jun-2026, but the card is
+// still in active use as INTEREST-FREE working capital: ~£15–22k/mo of spend, cleared in
+// full each month (0% interest, 1% cashback). It is NOT a carried debt while cleared on
+// time — only if a statement is missed does its ~44% APR apply. So it's excluded from the
+// lender total below; the balance is a within-month float, not a liability.
+const COT_REMNANT = 0;
 const CORP_TAX = 13000;             // accountant estimate, due Nov-26
 
 /** Pure: map balance-sheet lines (account name → value) + the off-Xero items

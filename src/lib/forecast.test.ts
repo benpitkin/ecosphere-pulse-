@@ -9,6 +9,7 @@ const COSTS: (keyof import("@/lib/forecast").MonthBreakdown)[] = [
   "cogs", "dnoMcs", "bankFees",
   "fundingCircle", "gcFinance", "amex",
   "mcsRenewal", "corporationTax", "accountant",
+  "agencyRetainer", "agencyAdSpend", "agencyCommission",
 ];
 
 const sum = (b: import("@/lib/forecast").MonthBreakdown, keys: (keyof typeof b)[]) =>
@@ -25,10 +26,10 @@ describe("toCommittedJobs — BUS eligibility & timing", () => {
     expect(out.map((j) => j.bus)).toEqual([7500, 0, 0]);
   });
 
-  it("lands customer cash in the install month and BUS ~2 months later", () => {
+  it("lands customer cash and the BUS grant in the install month (~1–2 weeks after commissioning)", () => {
     const [j] = toCommittedJobs([{ value: 15000, install_date: "2026-07-15", job_type: "ashp_install" }]);
     expect([j.cashY, j.cashM]).toEqual([2026, 6]); // July = month index 6
-    expect([j.busY, j.busM]).toEqual([2026, 8]);   // +2 = September
+    expect([j.busY, j.busM]).toEqual([2026, 6]);   // grant now lands the same month
   });
 
   it("skips jobs with no value or no date", () => {
@@ -119,5 +120,50 @@ describe("buildForecast — scenario levers move the needle the right way", () =
     const baseClosing = buildForecast(a).summary.closing;
     const leaner = buildForecast(a, { overrides: { cogsPct: 0.5 } }).summary.closing;
     expect(leaner).toBeGreaterThan(baseClosing); // lower COGS → more cash
+  });
+});
+
+describe("buildForecast — agency channel (paid lead-gen overlay)", () => {
+  const a = forecastInputs({ cash: 45000, receivables: 20000, overdue: 5000 });
+
+  it("is off by default: no agency cost lines appear", () => {
+    for (const m of buildForecast(a).months) {
+      expect(m.breakdown.agencyRetainer).toBe(0);
+      expect(m.breakdown.agencyAdSpend).toBe(0);
+      expect(m.breakdown.agencyCommission).toBe(0);
+    }
+  });
+
+  it("charges the fixed retainer + ad spend every month when enabled", () => {
+    const fc = buildForecast(a, { agency: { enabled: true } });
+    for (const m of fc.months) {
+      expect(m.breakdown.agencyRetainer).toBe(2000);
+      expect(m.breakdown.agencyAdSpend).toBe(2500);
+    }
+  });
+
+  it("adds installs and commission once ramped, and keeps breakdown sums consistent", () => {
+    const fc = buildForecast(a, { agency: { enabled: true, dealsPerMonth: 3 } });
+    const noAgency = buildForecast(a);
+    // Month 0 has a launch lag (ramp 0) → no extra installs; a later month should have more.
+    expect(fc.installs[3]).toBeGreaterThan(noAgency.installs[3]);
+    // A ramped month generates commission (2% of its agency revenue).
+    expect(fc.months[3].breakdown.agencyCommission).toBeGreaterThan(0);
+    // Cost lines still reconcile with the outflow total.
+    for (const m of fc.months) {
+      expect(Math.abs(sum(m.breakdown, COSTS) - m.outflows)).toBeLessThan(0.1);
+    }
+  });
+
+  it("caps agency installs at the spare capacity left after committed jobs", () => {
+    // Fill the month with 13 committed jobs (full capacity) → agency can't add installs there.
+    const full: CommittedJob[] = Array.from({ length: 13 }, () => ({
+      value: 15000, bus: 0, cashY: 2026, cashM: 8, busY: null, busM: null,
+    }));
+    const fc = buildForecast(a, { committed: full, agency: { enabled: true, dealsPerMonth: 5 }, now: new Date(2026, 5, 1) });
+    const sep = fc.months.findIndex((m) => m.label.startsWith("Sep"));
+    // Retainer/ad spend still charged, but commission is 0 (no room for agency installs).
+    expect(fc.months[sep].breakdown.agencyRetainer).toBe(2000);
+    expect(fc.months[sep].breakdown.agencyCommission).toBe(0);
   });
 });

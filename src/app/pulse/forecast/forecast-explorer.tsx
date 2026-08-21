@@ -68,6 +68,12 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const [mktScale, setMktScale] = useState(1);
   const [hire, setHire] = useState(false);
 
+  // Premises / commercial lease lever (e.g. Chinon Court, Tiverton). All-in monthly
+  // cost added on top of overheads: ~£1,977 = rent £14,709 + business rates £7,344 +
+  // service charge £1,148 + insurance £419 (÷12). Off by default.
+  const [premisesOn, setPremisesOn] = useState(false);
+  const [premises, setPremises] = useState(1977);
+
   // Marketing-agency lever (e.g. Solar on Steroids). Off by default; editable figures
   // seeded from the proposal defaults so the panel matches what they actually quoted.
   const [agencyOn, setAgencyOn] = useState(false);
@@ -110,7 +116,7 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const overrides = useMemo(
     () => ({
       openingCash: openingCashEdit,
-      monthlyOverheads: overheads,
+      monthlyOverheads: overheads + (premisesOn ? premises : 0),
       avgJob,
       cogsPct,
       busGrant,
@@ -118,7 +124,7 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
       natashaUplift: natasha,
       oneOffs: { mcsRenewal: mcs, corporationTax: corpTax, accountant },
     }),
-    [openingCashEdit, overheads, avgJob, cogsPct, busGrant, capacity, natasha, mcs, corpTax, accountant],
+    [openingCashEdit, overheads, premisesOn, premises, avgJob, cogsPct, busGrant, capacity, natasha, mcs, corpTax, accountant],
   );
 
   const agency = useMemo(
@@ -184,7 +190,7 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
   const minIdx = baseC.indexOf(Math.min(...baseC));
 
   // ---- scenario comparison ----
-  const settingsLabel = `${gbp(drawings)} draw · ${mktScale}× mkt${hire ? " · +hire" : ""}${agencyOn ? ` · +agency ${agDeals}/mo` : ""}`;
+  const settingsLabel = `${gbp(drawings)} draw · ${mktScale}× mkt${hire ? " · +hire" : ""}${agencyOn ? ` · +agency ${agDeals}/mo` : ""}${premisesOn ? ` · +premises ${gbp(premises)}/mo` : ""}`;
   const pinScenario = () =>
     setScenarios((s) => [
       ...s,
@@ -307,6 +313,27 @@ export default function ForecastExplorer({ cash, receivables, overdue, openingOv
         {hire ? (
           <p className="mt-2 text-xs text-muted-foreground">
             Adds installer capacity from Sep-26. It only pays for itself once demand tops your current ~13 installs/mo — try it with marketing on Push or Aggressive.
+          </p>
+        ) : null}
+
+        {/* Premises / commercial lease lever */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button onClick={() => setPremisesOn((v) => !v)}
+            className={`rounded-md border px-3 py-1.5 text-xs font-medium ${premisesOn ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:border-accent"}`}>
+            {premisesOn ? "✓ " : ""}Commercial premises (+{gbp(premises)}/mo)
+          </button>
+          {premisesOn ? (
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              all-in £/mo
+              <input type="number" value={premises} step={50}
+                onChange={(e) => setPremises(e.target.value === "" ? 0 : Number(e.target.value))}
+                className="w-24 rounded-md border border-border px-2 py-1 text-sm" />
+            </label>
+          ) : null}
+        </div>
+        {premisesOn ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            All-in monthly cost of a commercial lease (Chinon Court, Tiverton) added to overheads — default £1,977 = rent £14,709 + business rates £7,344 (no relief) + service charge £1,148 + insurance £419, per year ÷ 12. Rent/insurance VAT is reclaimable; rates and service charge aren&apos;t. Fit-out is minimal (furnishing existing rooms), so it&apos;s not modelled here.
           </p>
         ) : null}
 
